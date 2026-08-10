@@ -123,6 +123,7 @@ function Explorer.mount(widget: DockWidgetPluginGui)
 	return {
 		root = root,
 		rebuild = treeApi.rebuild,
+		refreshForRunState = treeApi.refreshForRunState,
 		destroy = treeApi.destroy,
 	}
 end

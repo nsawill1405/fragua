@@ -12,6 +12,7 @@ TestRunner.run({
 	InsertFlow = require("./InsertFlow.spec"),
 	IconData = require("./IconData.spec"),
 	EnginePropResolver = require("./EnginePropResolver.spec"),
+	LifecycleGate = require("./LifecycleGate.spec"),
 	ScriptHeader = require("./ScriptHeader.spec"),
 	TypeCatalog = require("./TypeCatalog.spec"),
 	ApiSource = require("./ApiSource.spec"),

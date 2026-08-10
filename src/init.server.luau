@@ -1,6 +1,7 @@
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local Selection = game:GetService("Selection")
 local ScriptEditorService = game:GetService("ScriptEditorService")
+local RunService = game:GetService("RunService")
 
 local Explorer = require(script.App.Explorer)
 local Properties = require(script.App.Properties)
@@ -11,6 +12,7 @@ local TypeCatalog = require(script.App.Runtime.TypeCatalog)
 local Host = require(script.App.Behaviors.Host)
 local Registry = require(script.App.Types.Registry)
 local Constants = require(script.App.Shared.Constants)
+local LifecycleGate = require(script.App.Shared.LifecycleGate)
 
 SettingsStore.bind(plugin)
 EnsurePlaceModules.sync()
@@ -65,6 +67,18 @@ local propertiesApi = Properties.mount(propertiesWidget, {
 		end)
 	end,
 })
+local lifecycleGate = LifecycleGate.new()
+local runStateConnection = RunService:GetPropertyChangedSignal("RunState"):Connect(function()
+	local token = lifecycleGate:advance()
+	explorerApi.refreshForRunState()
+	propertiesApi.refreshForRunState()
+	task.defer(function()
+		if lifecycleGate:isCurrent(token) then
+			explorerApi.rebuild()
+			propertiesApi.rebuild()
+		end
+	end)
+end)
 
 explorerBtn.Click:Connect(function()
 	explorerWidget.Enabled = not explorerWidget.Enabled
@@ -85,14 +99,22 @@ end)
 explorerBtn:SetActive(explorerWidget.Enabled)
 propertiesBtn:SetActive(propertiesWidget.Enabled)
 
-Selection.SelectionChanged:Connect(function()
-	Host.onSelection(Selection:Get())
+local selectionConnection = Selection.SelectionChanged:Connect(function()
+	local valid = {}
+	for _, instance in Selection:Get() do
+		if instance:IsDescendantOf(game) then
+			table.insert(valid, instance)
+		end
+	end
+	Host.onSelection(valid)
 end)
 
 plugin.Unloading:Connect(function()
 	scriptInjector.destroy()
 	behaviorSync.destroy()
 	catalogConnection:Disconnect()
+	runStateConnection:Disconnect()
+	selectionConnection:Disconnect()
 	if explorerApi and explorerApi.destroy then
 		explorerApi.destroy()
 	end

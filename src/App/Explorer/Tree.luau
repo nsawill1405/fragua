@@ -1235,6 +1235,15 @@ function Tree.mount(
 
 	return {
 		rebuild = rebuild,
+		refreshForRunState = function()
+			if dragging or dragPressed then
+				abortDrag()
+			end
+			hoveredInstance = nil
+			dropTarget = nil
+			selectionAnchor = nil
+			scheduleRebuild()
+		end,
 		reveal = function(inst: Instance)
 			local current: Instance? = inst.Parent
 			while current and current ~= game do
