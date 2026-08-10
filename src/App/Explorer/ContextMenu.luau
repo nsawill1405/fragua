@@ -10,30 +10,71 @@ export type MenuItem = {
 	separator: boolean?,
 }
 
-function ContextMenu.open(host: Instance, screenPos: Vector2, items: { MenuItem })
+export type OpenAt = {
+	-- row/button that was right-clicked (same AbsolutePosition space as host)
+	anchor: GuiObject,
+	-- optional window-space click from InputObject.Position
+	clickPos: Vector2?,
+}
+
+function ContextMenu.open(host: Instance, items: { MenuItem }, at: OpenAt)
 	local existing = host:FindFirstChild("ContextMenuOverlay")
 	if existing then
 		existing:Destroy()
+	end
+
+	local hostGui = host :: GuiObject
+	local hostAbs = hostGui.AbsolutePosition
+	local anchorAbs = at.anchor.AbsolutePosition
+	local anchorSize = at.anchor.AbsoluteSize
+
+	-- Prefer click offset within the anchor; fall back to middle of the row.
+	-- Using AbsolutePosition deltas keeps PluginGui coords consistent (unlike GetMouseLocation).
+	local localPos: Vector2
+	if at.clickPos then
+		local offsetInAnchor = at.clickPos - anchorAbs
+		-- If clickPos space mismatches AbsolutePosition, offset will be wild; fall back.
+		if
+			offsetInAnchor.X < -8
+			or offsetInAnchor.Y < -8
+			or offsetInAnchor.X > anchorSize.X + 8
+			or offsetInAnchor.Y > anchorSize.Y + 8
+		then
+			localPos = (anchorAbs - hostAbs) + Vector2.new(6, anchorSize.Y * 0.5)
+		else
+			localPos = (anchorAbs - hostAbs) + offsetInAnchor
+		end
+	else
+		localPos = (anchorAbs - hostAbs) + Vector2.new(6, anchorSize.Y * 0.5)
 	end
 
 	local overlay = Instance.new("Frame")
 	overlay.Name = "ContextMenuOverlay"
 	overlay.BackgroundTransparency = 1
 	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.ZIndex = 90
+	overlay.ZIndex = 200
+	overlay.Active = true
 	overlay.Parent = host
 
-	local hostGui = host :: GuiObject
-	local localPos = screenPos - hostGui.AbsolutePosition
+	local dismiss = Instance.new("TextButton")
+	dismiss.Name = "Dismiss"
+	dismiss.AutoButtonColor = false
+	dismiss.Text = ""
+	dismiss.BackgroundTransparency = 1
+	dismiss.BorderSizePixel = 0
+	dismiss.Size = UDim2.fromScale(1, 1)
+	dismiss.ZIndex = 200
+	dismiss.Active = false
+	dismiss.Parent = overlay
 
 	local menu = Instance.new("Frame")
 	menu.Name = "Menu"
 	menu.BackgroundColor3 = Theme.bgRaised
 	menu.BorderSizePixel = 0
 	menu.AutomaticSize = Enum.AutomaticSize.Y
-	menu.Size = UDim2.fromOffset(180, 0)
-	menu.Position = UDim2.fromOffset(localPos.X, localPos.Y)
-	menu.ZIndex = 91
+	menu.Size = UDim2.fromOffset(168, 0)
+	menu.Position = UDim2.fromOffset(localPos.X + 2, localPos.Y + 2)
+	menu.ZIndex = 201
 	menu.Parent = overlay
 
 	local corner = Instance.new("UICorner")
@@ -47,23 +88,28 @@ function ContextMenu.open(host: Instance, screenPos: Vector2, items: { MenuItem 
 
 	local list = Instance.new("UIListLayout")
 	list.SortOrder = Enum.SortOrder.LayoutOrder
-	list.Padding = UDim.new(0, 1)
+	list.Padding = UDim.new(0, 0)
 	list.Parent = menu
 
 	local pad = Instance.new("UIPadding")
-	pad.PaddingTop = UDim.new(0, 4)
-	pad.PaddingBottom = UDim.new(0, 4)
-	pad.PaddingLeft = UDim.new(0, 4)
-	pad.PaddingRight = UDim.new(0, 4)
+	pad.PaddingTop = UDim.new(0, 3)
+	pad.PaddingBottom = UDim.new(0, 3)
+	pad.PaddingLeft = UDim.new(0, 3)
+	pad.PaddingRight = UDim.new(0, 3)
 	pad.Parent = menu
 
 	local function close()
-		overlay:Destroy()
+		if overlay.Parent then
+			overlay:Destroy()
+		end
 	end
 
-	overlay.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			task.defer(close)
+	dismiss.MouseButton1Click:Connect(close)
+	dismiss.MouseButton2Click:Connect(close)
+
+	task.delay(0.15, function()
+		if dismiss.Parent then
+			dismiss.Active = true
 		end
 	end)
 
@@ -74,7 +120,7 @@ function ContextMenu.open(host: Instance, screenPos: Vector2, items: { MenuItem 
 			sep.BorderSizePixel = 0
 			sep.Size = UDim2.new(1, 0, 0, 1)
 			sep.LayoutOrder = i
-			sep.ZIndex = 92
+			sep.ZIndex = 202
 			sep.Parent = menu
 			continue
 		end
@@ -83,14 +129,14 @@ function ContextMenu.open(host: Instance, screenPos: Vector2, items: { MenuItem 
 		btn.AutoButtonColor = false
 		btn.BackgroundTransparency = 1
 		btn.BorderSizePixel = 0
-		btn.Size = UDim2.new(1, 0, 0, 26)
+		btn.Size = UDim2.new(1, 0, 0, 22)
 		btn.Font = Theme.font
-		btn.TextSize = 13
+		btn.TextSize = 12
 		btn.TextXAlignment = Enum.TextXAlignment.Left
 		btn.Text = "  " .. item.label
 		btn.TextColor3 = if item.disabled then Theme.textMuted elseif item.danger then Theme.danger else Theme.textBright
 		btn.LayoutOrder = i
-		btn.ZIndex = 92
+		btn.ZIndex = 202
 		btn.Active = not item.disabled
 		btn.Parent = menu
 
@@ -115,17 +161,22 @@ function ContextMenu.open(host: Instance, screenPos: Vector2, items: { MenuItem 
 		end
 	end
 
-	-- Keep on-screen
 	task.defer(function()
 		if not menu.Parent then
 			return
 		end
-		local maxX = hostGui.AbsoluteSize.X - menu.AbsoluteSize.X - 4
-		local maxY = hostGui.AbsoluteSize.Y - menu.AbsoluteSize.Y - 4
-		menu.Position = UDim2.fromOffset(
-			math.clamp(menu.Position.X.Offset, 4, math.max(4, maxX)),
-			math.clamp(menu.Position.Y.Offset, 4, math.max(4, maxY))
-		)
+		local menuSize = menu.AbsoluteSize
+		local hostSize = hostGui.AbsoluteSize
+		local x = localPos.X + 2
+		local y = localPos.Y + 2
+		-- flip if overflowing
+		if x + menuSize.X > hostSize.X - 4 then
+			x = math.max(4, localPos.X - menuSize.X - 2)
+		end
+		if y + menuSize.Y > hostSize.Y - 4 then
+			y = math.max(4, localPos.Y - menuSize.Y - 2)
+		end
+		menu.Position = UDim2.fromOffset(math.max(4, x), math.max(4, y))
 	end)
 
 	return overlay

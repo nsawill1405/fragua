@@ -59,7 +59,7 @@ function IconPicker.open(parentGui: Instance, currentId: string?, onPick: (strin
 	end)
 
 	local search = Instance.new("TextBox")
-	search.PlaceholderText = "Filter…"
+	search.PlaceholderText = "Filter..."
 	search.ClearTextOnFocus = false
 	search.Text = ""
 	search.Font = Theme.font
@@ -113,7 +113,11 @@ function IconPicker.open(parentGui: Instance, currentId: string?, onPick: (strin
 		end
 		local lower = string.lower(filter)
 		for i, def in IconCatalog.list() do
-			if lower == "" or string.find(string.lower(def.label), lower, 1, true) or string.find(string.lower(def.id), lower, 1, true) then
+			if
+				lower == ""
+				or string.find(string.lower(def.label), lower, 1, true)
+				or string.find(string.lower(def.id), lower, 1, true)
+			then
 				local btn = Instance.new("TextButton")
 				btn.Name = def.id
 				btn.Text = ""

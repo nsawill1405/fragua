@@ -46,7 +46,8 @@ local function sortCategories(cats: { string }): { string }
 	return cats
 end
 
-function Properties.mount(widget: DockWidgetPluginGui)
+function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((any) -> ())? }?)
+	opts = opts or {}
 	local root = Instance.new("Frame")
 	root.Name = "PropertiesRoot"
 	root.BackgroundColor3 = Theme.bg
@@ -127,7 +128,7 @@ function Properties.mount(widget: DockWidgetPluginGui)
 		section.AutoButtonColor = false
 		section.BackgroundColor3 = Theme.section
 		section.BorderSizePixel = 0
-		section.Size = UDim2.new(1, 0, 0, 22)
+		section.Size = UDim2.new(1, 0, 0, 24)
 		section.Text = ""
 		section.LayoutOrder = order
 		section.Parent = scroll
@@ -139,15 +140,8 @@ function Properties.mount(widget: DockWidgetPluginGui)
 		accent.Position = UDim2.fromOffset(0, 2)
 		accent.Parent = section
 
-		local twist = Instance.new("TextLabel")
-		twist.BackgroundTransparency = 1
-		twist.Position = UDim2.fromOffset(10, 0)
-		twist.Size = UDim2.fromOffset(14, 22)
-		twist.Font = Enum.Font.GothamBold
-		twist.TextSize = 11
-		twist.TextColor3 = Theme.textMuted
-		twist.Text = if collapsed then ">" else "v"
-		twist.Parent = section
+		local twist = UiUtil.makeChevron(section, not collapsed, 14)
+		twist.Position = UDim2.fromOffset(8, 5)
 
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
@@ -160,17 +154,60 @@ function Properties.mount(widget: DockWidgetPluginGui)
 		label.Text = string.upper(name)
 		label.Parent = section
 
-		section.MouseButton1Click:Connect(onToggle)
+		section.MouseButton1Click:Connect(function()
+			UiUtil.setChevronExpanded(twist, collapsed, true)
+			task.delay(0.05, onToggle)
+		end)
 	end
 
-	local function addRow(order: number, prop: {
-		name: string,
-		valueType: string,
-		value: any,
-		readonly: boolean?,
-		enumItems: { string }?,
-		onCommit: (any) -> (),
-	})
+	local NUMBER_RANGES: { [string]: { number } } = {
+		Transparency = { 0, 1 },
+		BackgroundTransparency = { 0, 1 },
+		TextTransparency = { 0, 1 },
+		Reflectance = { 0, 1 },
+		FillTransparency = { 0, 1 },
+		OutlineTransparency = { 0, 1 },
+		Volume = { 0, 1 },
+		PlaybackSpeed = { 0, 4 },
+		Brightness = { 0, 10 },
+		ClockTime = { 0, 24 },
+		GeographicLatitude = { -90, 90 },
+		FogStart = { 0, 10000 },
+		FogEnd = { 0, 100000 },
+		Gravity = { 0, 500 },
+		WalkSpeed = { 0, 100 },
+		JumpPower = { 0, 200 },
+		JumpHeight = { 0, 50 },
+		HipHeight = { 0, 20 },
+		Health = { 0, 500 },
+		MaxHealth = { 0, 500 },
+		Range = { 0, 120 },
+		Angle = { 0, 180 },
+		FieldOfView = { 1, 120 },
+		TextSize = { 1, 100 },
+		BorderSizePixel = { 0, 20 },
+		ZIndex = { 0, 100 },
+		Intensity = { 0, 10 },
+		Contrast = { -1, 1 },
+		Saturation = { -1, 1 },
+		Density = { 0, 1 },
+		Spread = { 0, 1 },
+		Threshold = { 0, 10 },
+		Size = { 0, 50 },
+	}
+
+	local function addRow(
+		order: number,
+		prop: {
+			name: string,
+			valueType: string,
+			value: any,
+			readonly: boolean?,
+			enumItems: { string }?,
+			enumType: string?,
+			onCommit: (any) -> (),
+		}
+	)
 		local row = Instance.new("Frame")
 		row.BackgroundColor3 = Theme.bg
 		row.BorderSizePixel = 0
@@ -208,6 +245,14 @@ function Properties.mount(widget: DockWidgetPluginGui)
 		local valueType = prop.valueType
 		local value = prop.value
 
+		if valueType == "action" and not readonly then
+			local action = Theme.makeButton(valueParent, tostring(value), { Size = UDim2.fromScale(1, 1) })
+			action.MouseButton1Click:Connect(function()
+				prop.onCommit(true)
+			end)
+			return
+		end
+
 		if valueType == "boolean" and not readonly then
 			local toggle = Instance.new("TextButton")
 			toggle.AutoButtonColor = false
@@ -239,10 +284,14 @@ function Properties.mount(widget: DockWidgetPluginGui)
 		if (valueType == "enum" or prop.enumItems) and not readonly then
 			local items = prop.enumItems or { tostring(value) }
 			local currentName = if typeof(value) == "EnumItem" then value.Name else tostring(value)
+			local enumType = prop.enumType
+			if not enumType and typeof(value) == "EnumItem" then
+				enumType = value.EnumType.Name
+			end
 			local drop = Controls.enumDropdown(valueParent, items, currentName, function(picked)
 				ChangeHistoryService:SetWaypoint("Fragua Property")
 				prop.onCommit(picked)
-			end)
+			end, enumType)
 			drop.Size = UDim2.fromScale(1, 1)
 			return
 		end
@@ -252,6 +301,15 @@ function Properties.mount(widget: DockWidgetPluginGui)
 				ChangeHistoryService:SetWaypoint("Fragua Property")
 				prop.onCommit(c)
 			end)
+			field.Size = UDim2.fromScale(1, 1)
+			return
+		end
+
+		if valueType == "number" and typeof(value) == "number" and not readonly then
+			local field = Controls.numberField(valueParent, value, function(n)
+				ChangeHistoryService:SetWaypoint("Fragua Property")
+				prop.onCommit(n)
+			end, NUMBER_RANGES[prop.name])
 			field.Size = UDim2.fromScale(1, 1)
 			return
 		end
@@ -292,171 +350,230 @@ function Properties.mount(widget: DockWidgetPluginGui)
 		end
 		rebuilding = true
 		local ok, err = pcall(function()
-		clearConns()
-		clearRows()
-		local list = Selection:Get()
-		current = list[1]
-		if not current then
-			title.Text = "No selection"
-			iconHolder:SetAttribute("IconId", "class_Folder")
-			return
-		end
-
-		local byCategory: { [string]: { any } } = {}
-		local categories: { string } = {}
-
-		local function push(cat: string, row: any)
-			if not byCategory[cat] then
-				byCategory[cat] = {}
-				table.insert(categories, cat)
+			clearConns()
+			clearRows()
+			local list = Selection:Get()
+			current = list[1]
+			if not current then
+				title.Text = "No selection"
+				iconHolder:SetAttribute("IconId", "class_Folder")
+				return
 			end
-			table.insert(byCategory[cat], row)
-		end
 
-		if Registry.isFraguaInstance(current) then
-			local typeId = Registry.getTypeId(current)
-			local def = typeId and Registry.get(typeId)
-			local classLabel = if def then def.name else (typeId or "Unknown")
-			title.Text = current.Name .. "  ·  " .. classLabel
-			iconHolder:SetAttribute("IconId", if def then def.icon else "emoji_warning")
+			local byCategory: { [string]: { any } } = {}
+			local categories: { string } = {}
 
-			push("Data", {
-				name = "Name",
-				valueType = "string",
-				value = current.Name,
-				onCommit = function(v)
-					current.Name = tostring(v)
-				end,
-			})
-			push("Data", {
-				name = "Class",
-				valueType = "string",
-				value = classLabel,
-				readonly = true,
-				onCommit = function() end,
-			})
+			local function push(cat: string, row: any)
+				if not byCategory[cat] then
+					byCategory[cat] = {}
+					table.insert(categories, cat)
+				end
+				table.insert(byCategory[cat], row)
+			end
 
-			if def then
-				for _, prop in Registry.resolvedSchema(def) do
-					if prop.name ~= "Name" and prop.name ~= "Archivable" then
-						local value = current:GetAttribute(prop.name)
-						if value == nil then
-							value = prop.default
+			if Registry.isFraguaInstance(current) then
+				local typeId = Registry.getTypeId(current)
+				local def = typeId and Registry.get(typeId)
+				local classLabel = if def then def.name else (typeId or "Unknown")
+				title.Text = current.Name .. "  /  " .. classLabel
+				iconHolder:SetAttribute("IconId", if def then def.icon else "emoji_warning")
+
+				push("Data", {
+					name = "Name",
+					valueType = "string",
+					value = current.Name,
+					onCommit = function(v)
+						current.Name = tostring(v)
+					end,
+				})
+				local typeIds = {}
+				for _, d in Registry.list() do
+					table.insert(typeIds, d.id)
+				end
+				table.sort(typeIds)
+				push("Data", {
+					name = "Type",
+					valueType = "enum",
+					value = typeId or classLabel,
+					enumItems = typeIds,
+					onCommit = function(v)
+						if typeof(v) == "string" and v ~= "" then
+							Registry.applyType(current, v)
 						end
-						local captured = prop.name
-						push(prop.category or "Data", {
-							name = prop.name,
-							valueType = prop.valueType,
-							value = value,
-							readonly = prop.readonly == true,
-							enumItems = prop.enumItems,
-							onCommit = function(v)
-								current:SetAttribute(captured, v)
-							end,
-						})
+					end,
+				})
+
+				if def then
+					for _, prop in Registry.resolvedSchema(def) do
+						if prop.name ~= "Name" and prop.name ~= "Archivable" then
+							local value = current:GetAttribute(prop.name)
+							if value == nil then
+								value = prop.default
+							end
+							local captured = prop.name
+							push(prop.category or "Data", {
+								name = prop.name,
+								valueType = prop.valueType,
+								value = value,
+								readonly = prop.readonly == true,
+								enumItems = prop.enumItems,
+								onCommit = function(v)
+									current:SetAttribute(captured, v)
+								end,
+							})
+						end
 					end
 				end
-			end
-		else
-			title.Text = current.Name .. "  ·  " .. current.ClassName
-			iconHolder:SetAttribute("IconId", "class_" .. current.ClassName)
 
-			for _, prop in EngineProps.forInstance(current) do
-				local ok, value = pcall(EngineProps.get, current, prop.name)
-				if not ok then
-					continue
+				if typeId then
+					local behavior = Registry.ensureBehaviorTemplate(typeId)
+					local hooks = {}
+					for hookName in behavior.Source:gmatch("function%s+Behavior%.([%a_][%w_]*)") do
+						table.insert(hooks, hookName)
+					end
+					table.sort(hooks)
+					push("Behavior", {
+						name = "Shared behavior",
+						valueType = "string",
+						value = behavior.Name,
+						readonly = true,
+						onCommit = function() end,
+					})
+					push("Behavior", {
+						name = "Used by",
+						valueType = "string",
+						value = `{Registry.countInstances(typeId)} instance(s)`,
+						readonly = true,
+						onCommit = function() end,
+					})
+					push("Behavior", {
+						name = "Hooks",
+						valueType = "string",
+						value = if #hooks > 0 then table.concat(hooks, ", ") else "No hooks yet",
+						readonly = true,
+						onCommit = function() end,
+					})
+					push("Behavior", {
+						name = "Code",
+						valueType = "action",
+						value = "Edit behavior",
+						onCommit = function()
+							if opts.onEditScript then
+								opts.onEditScript({
+									target = behavior,
+									title = behavior.Name,
+									typeId = typeId,
+									sharedCount = Registry.countInstances(typeId),
+								})
+							end
+						end,
+					})
 				end
-				local valueType = prop.valueType or Util.attributeTypeName(value)
-				local enumItems = prop.enumItems
-				local readonly = prop.readonly == true
-				local displayValue = value
+			else
+				title.Text = current.Name .. "  /  " .. current.ClassName
+				iconHolder:SetAttribute("IconId", "class_" .. current.ClassName)
 
-				if typeof(value) == "EnumItem" then
-					valueType = "enum"
-					displayValue = value.Name
-					enumItems = EngineProps.resolveEnumItems(prop, value)
-				elseif typeof(value) == "Instance" then
-					valueType = "string"
-					displayValue = value:GetFullName()
-					readonly = true
-				elseif valueType == "enum" then
-					enumItems = EngineProps.resolveEnumItems(prop, value)
+				for _, prop in EngineProps.forInstance(current) do
+					local gotValue, value = pcall(EngineProps.get, current, prop.name)
+					if not gotValue then
+						continue
+					end
+					local valueType = prop.valueType or Util.attributeTypeName(value)
+					local enumItems = prop.enumItems
+					local readonly = prop.readonly == true
+					local displayValue = value
+
 					if typeof(value) == "EnumItem" then
+						valueType = "enum"
 						displayValue = value.Name
+						enumItems = EngineProps.resolveEnumItems(prop, value)
+					elseif typeof(value) == "Instance" then
+						valueType = "string"
+						displayValue = value:GetFullName()
+						readonly = true
+					elseif valueType == "enum" then
+						enumItems = EngineProps.resolveEnumItems(prop, value)
+						if typeof(value) == "EnumItem" then
+							displayValue = value.Name
+						end
+					elseif typeof(value) == "Color3" then
+						valueType = "Color3"
+					elseif typeof(value) == "Vector3" then
+						valueType = "Vector3"
+					elseif typeof(value) == "boolean" then
+						valueType = "boolean"
+					elseif typeof(value) == "number" then
+						valueType = "number"
 					end
-				elseif typeof(value) == "Color3" then
-					valueType = "Color3"
-				elseif typeof(value) == "Vector3" then
-					valueType = "Vector3"
-				elseif typeof(value) == "boolean" then
-					valueType = "boolean"
-				elseif typeof(value) == "number" then
-					valueType = "number"
+
+					local capturedName = prop.name
+					local enumType = prop.enumType
+					if not enumType and typeof(value) == "EnumItem" then
+						enumType = value.EnumType.Name
+					end
+					push(prop.category or "Data", {
+						name = prop.name,
+						valueType = valueType,
+						value = if valueType == "enum" and typeof(value) == "EnumItem" then value else displayValue,
+						readonly = readonly,
+						enumItems = enumItems,
+						enumType = enumType,
+						onCommit = function(v)
+							EngineProps.set(current, capturedName, v)
+						end,
+					})
 				end
 
-				local capturedName = prop.name
-				push(prop.category or "Data", {
-					name = prop.name,
-					valueType = valueType,
-					value = displayValue,
-					readonly = readonly,
-					enumItems = enumItems,
-					onCommit = function(v)
-						EngineProps.set(current, capturedName, v)
-					end,
-				})
-			end
-
-			local attrs = current:GetAttributes()
-			local attrNames = {}
-			for name in attrs do
-				if name ~= "_FraguaType" then
-					table.insert(attrNames, name)
+				local attrs = current:GetAttributes()
+				local attrNames = {}
+				for name in attrs do
+					if name ~= "_FraguaType" then
+						table.insert(attrNames, name)
+					end
+				end
+				table.sort(attrNames)
+				for _, name in attrNames do
+					local value = attrs[name]
+					local captured = name
+					push("Attributes", {
+						name = name,
+						valueType = Util.attributeTypeName(value),
+						value = value,
+						onCommit = function(v)
+							current:SetAttribute(captured, v)
+						end,
+					})
 				end
 			end
-			table.sort(attrNames)
-			for _, name in attrNames do
-				local value = attrs[name]
-				local captured = name
-				push("Attributes", {
-					name = name,
-					valueType = Util.attributeTypeName(value),
-					value = value,
-					onCommit = function(v)
-						current:SetAttribute(captured, v)
-					end,
-				})
-			end
-		end
 
-		local order = 1
-		for _, cat in sortCategories(categories) do
-			local catName = cat
-			addSection(catName, order, function()
-				collapsedSections[catName] = not collapsedSections[catName]
-				task.defer(rebuild)
-			end)
-			order += 1
-			if not collapsedSections[catName] then
-				for _, row in byCategory[catName] do
-					addRow(order, row)
-					order += 1
+			local order = 1
+			for _, cat in sortCategories(categories) do
+				local catName = cat
+				addSection(catName, order, function()
+					collapsedSections[catName] = not collapsedSections[catName]
+					task.defer(rebuild)
+				end)
+				order += 1
+				if not collapsedSections[catName] then
+					for _, row in byCategory[catName] do
+						addRow(order, row)
+						order += 1
+					end
 				end
 			end
-		end
 
-		table.insert(
-			conns,
-			current.Changed:Connect(function()
-				task.defer(rebuild)
-			end)
-		)
-		table.insert(
-			conns,
-			current.AttributeChanged:Connect(function()
-				task.defer(rebuild)
-			end)
-		)
+			table.insert(
+				conns,
+				current.Changed:Connect(function()
+					task.defer(rebuild)
+				end)
+			)
+			table.insert(
+				conns,
+				current.AttributeChanged:Connect(function()
+					task.defer(rebuild)
+				end)
+			)
 		end)
 		rebuilding = false
 		if not ok then
@@ -465,12 +582,18 @@ function Properties.mount(widget: DockWidgetPluginGui)
 	end
 
 	local lifetime: { RBXScriptConnection } = {}
-	table.insert(lifetime, Selection.SelectionChanged:Connect(function()
-		task.defer(rebuild)
-	end))
-	table.insert(lifetime, Registry.Changed:Connect(function()
-		task.defer(rebuild)
-	end))
+	table.insert(
+		lifetime,
+		Selection.SelectionChanged:Connect(function()
+			task.defer(rebuild)
+		end)
+	)
+	table.insert(
+		lifetime,
+		Registry.Changed:Connect(function()
+			task.defer(rebuild)
+		end)
+	)
 	rebuild()
 
 	return {

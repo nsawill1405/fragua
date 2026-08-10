@@ -1,5 +1,5 @@
-local UserInputService = game:GetService("UserInputService")
 local Theme = require(script.Parent.Theme)
+local PointerController = require(script.Parent.PointerController)
 
 local UiUtil = {}
 
@@ -20,9 +20,9 @@ function UiUtil.makeCloseButton(parent: Instance, size: number?): TextButton
 	btn.BackgroundTransparency = 1
 	btn.BorderSizePixel = 0
 	btn.Size = UDim2.fromOffset(px, px)
-	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = math.floor(px * 0.7)
-	btn.Text = "✕"
+	btn.Font = Theme.fontBold
+	btn.TextSize = math.floor(px * 0.72)
+	btn.Text = "x"
 	btn.TextColor3 = Theme.textMuted
 	btn.Parent = parent
 
@@ -43,42 +43,167 @@ function UiUtil.makeCloseButton(parent: Instance, size: number?): TextButton
 	return btn
 end
 
+function UiUtil.makeChevron(parent: Instance, expanded: boolean, size: number?): Frame
+	local px = size or 14
+	local twist = Instance.new("Frame")
+	twist.Name = "Chevron"
+	twist.BackgroundTransparency = 1
+	twist.Size = UDim2.fromOffset(px, px)
+	twist.Rotation = if expanded then 90 else 0
+	twist.Parent = parent
+
+	for direction in { -1, 1 } do
+		local line = Instance.new("Frame")
+		line.Name = "Line"
+		line.AnchorPoint = Vector2.new(0.5, 0.5)
+		line.BackgroundColor3 = Theme.textMuted
+		line.BorderSizePixel = 0
+		line.Position = UDim2.fromScale(0.5, if direction == -1 then 0.37 else 0.63)
+		line.Size = UDim2.fromOffset(math.max(5, px - 8), 1)
+		line.Rotation = 45 * direction
+		line.Parent = twist
+	end
+	return twist
+end
+
+function UiUtil.setChevronExpanded(twist: GuiObject, expanded: boolean, animate: boolean?)
+	local rot = if expanded then 90 else 0
+	if animate == false then
+		twist.Rotation = rot
+	else
+		Theme.tween(twist, { Rotation = rot }, Theme.tweenFast)
+	end
+end
+
+function UiUtil.makeFocusStroke(control: GuiObject): UIStroke
+	local stroke = Instance.new("UIStroke")
+	stroke.Name = "FocusStroke"
+	stroke.Color = Theme.accent
+	stroke.Thickness = 1
+	stroke.Transparency = 1
+	stroke.Parent = control
+	if control:IsA("TextBox") then
+		control.Focused:Connect(function()
+			Theme.play(stroke, "focus", { Transparency = 0 })
+		end)
+		control.FocusLost:Connect(function()
+			Theme.play(stroke, "focus", { Transparency = 1 })
+		end)
+	end
+	return stroke
+end
+
+function UiUtil.makeCard(parent: Instance): Frame
+	local card = Instance.new("Frame")
+	card.BackgroundColor3 = Theme.bgRaised
+	card.BorderSizePixel = 0
+	card.Parent = parent
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = Theme.radius.card
+	corner.Parent = card
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Theme.borderLight
+	stroke.Transparency = 0.45
+	stroke.Parent = card
+	return card
+end
+
+-- PluginGui-safe pointer capture. MouseMoved x/y are local to `host`.
+-- Prefer this over UIS MouseMovement / IsMouseButtonPressed (both flaky in docks).
+function UiUtil.capturePointer(
+	host: GuiObject,
+	onMove: (x: number, y: number) -> (),
+	onUp: (x: number, y: number) -> (),
+	initialX: number?,
+	initialY: number?
+): TextButton
+	PointerController.capture(host, {
+		initial = if initialX ~= nil and initialY ~= nil then Vector2.new(initialX, initialY) else nil,
+		onMove = onMove,
+		onFinish = function(x, y)
+			onUp(x, y)
+		end,
+	})
+	return host:FindFirstChild("_FraguaCapture") :: TextButton
+end
+
+-- convert host-local point to a descendant's local space (same AbsolutePosition basis)
+function UiUtil.hostToLocal(host: GuiObject, gui: GuiObject, hostX: number, hostY: number): Vector2
+	local x, y = PointerController.toControlLocal(host, gui, hostX, hostY)
+	return Vector2.new(x, y)
+end
+
+-- best host for pointer capture / dropdown parenting inside dock widgets
+function UiUtil.dockHost(from: Instance): GuiObject
+	local named = from:FindFirstAncestor("PropertiesRoot")
+		or from:FindFirstAncestor("ExplorerRoot")
+		or from:FindFirstAncestorWhichIsA("PluginGui")
+		or from:FindFirstAncestorOfClass("Frame")
+		or from
+	return named :: GuiObject
+end
+
+-- place a dropdown under (or above) an anchor so it stays inside host bounds
+function UiUtil.placeDropdown(host: GuiObject, anchor: GuiObject, drop: GuiObject, width: number?, maxHeight: number?)
+	local w = width or math.max(140, anchor.AbsoluteSize.X)
+	local maxH = maxHeight or 200
+	local hostAbs = host.AbsolutePosition
+	local hostSize = host.AbsoluteSize
+	local anchorAbs = anchor.AbsolutePosition
+	local anchorSize = anchor.AbsoluteSize
+
+	local localX = anchorAbs.X - hostAbs.X
+	local belowY = anchorAbs.Y - hostAbs.Y + anchorSize.Y + 2
+	local aboveY = anchorAbs.Y - hostAbs.Y - 2
+
+	-- clamp x
+	if localX + w > hostSize.X - 4 then
+		localX = math.max(4, hostSize.X - w - 4)
+	end
+	if localX < 4 then
+		localX = 4
+	end
+
+	local spaceBelow = hostSize.Y - belowY - 4
+	local spaceAbove = aboveY - 4
+	local openUp = spaceBelow < math.min(maxH, 120) and spaceAbove > spaceBelow
+	local height = math.min(maxH, math.max(80, if openUp then spaceAbove else spaceBelow))
+
+	drop.Size = UDim2.fromOffset(w, height)
+	if openUp then
+		drop.Position = UDim2.fromOffset(localX, math.max(4, aboveY - height))
+	else
+		drop.Position = UDim2.fromOffset(localX, belowY)
+	end
+end
+
 function UiUtil.makeDraggable(handle: GuiObject, target: GuiObject)
-	local dragging = false
-	local dragStart: Vector2? = nil
-	local startPos: UDim2? = nil
-
+	handle.Active = true
 	handle.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			dragging = true
-			dragStart = Vector2.new(input.Position.X, input.Position.Y)
-			startPos = target.Position
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
-			end)
-		end
-	end)
-
-	local moveConn = UserInputService.InputChanged:Connect(function(input)
-		if not dragging or input.UserInputType ~= Enum.UserInputType.MouseMovement then
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 			return
 		end
-		if not dragStart or not startPos then
+		-- The target's parent is the overlay coordinate space. PluginGui is a
+		-- LayerCollector, not a GuiObject, so it cannot host pointer capture.
+		local host = target.Parent
+		if not host or not host:IsA("GuiObject") then
 			return
 		end
-		local delta = Vector2.new(input.Position.X, input.Position.Y) - dragStart
-		target.Position = UDim2.new(
-			startPos.X.Scale,
-			startPos.X.Offset + delta.X,
-			startPos.Y.Scale,
-			startPos.Y.Offset + delta.Y
-		)
-	end)
-
-	target.Destroying:Connect(function()
-		moveConn:Disconnect()
+		local startPos = target.Position
+		local raw = input.Position
+		local originX, originY = PointerController.toHostLocal(host :: GuiObject, raw.X, raw.Y)
+		PointerController.capture(host :: GuiObject, {
+			initial = Vector2.new(originX, originY),
+			onMove = function(x, y)
+				local delta = Vector2.new(x - originX, y - originY)
+				target.Position = UDim2.new(
+					startPos.X.Scale,
+					startPos.X.Offset + delta.X,
+					startPos.Y.Scale,
+					startPos.Y.Offset + delta.Y
+				)
+			end,
+		})
 	end)
 end
 
@@ -113,15 +238,23 @@ function UiUtil.sectionColor(name: string): Color3
 		Animation = Color3.fromRGB(200, 120, 180),
 		Physics = Color3.fromRGB(140, 200, 160),
 	}
+	local fallback: Color3
 	if palette[name] then
-		return palette[name]
+		fallback = palette[name]
+	else
+		local h = 0
+		for i = 1, #name do
+			h = (h * 31 + string.byte(name, i)) % 360
+		end
+		fallback = Color3.fromHSV(h / 360, 0.45, 0.85)
 	end
-	-- stable hash color
-	local h = 0
-	for i = 1, #name do
-		h = (h * 31 + string.byte(name, i)) % 360
+	local ok, Store = pcall(function()
+		return require(script.Parent.Parent.Settings.Store)
+	end)
+	if ok and Store and Store.colorForSection then
+		return Store.colorForSection(name, fallback)
 	end
-	return Color3.fromHSV(h / 360, 0.45, 0.85)
+	return fallback
 end
 
 return UiUtil

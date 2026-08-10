@@ -72,14 +72,26 @@ local BY_CLASS: { [string]: { EngineProp } } = {
 		{ name = "Transparency", category = "Appearance", valueType = "number" },
 		{ name = "Reflectance", category = "Appearance", valueType = "number" },
 		{ name = "Color", category = "Appearance", valueType = "Color3" },
-		{ name = "Material", category = "Appearance", valueType = "enum", enumType = "Material", enumItems = MATERIALS },
-		{ name = "Shape", category = "Part", valueType = "enum", enumType = "PartType", enumItems = {
-			"Ball",
-			"Block",
-			"Cylinder",
-			"Wedge",
-			"CornerWedge",
-		} },
+		{
+			name = "Material",
+			category = "Appearance",
+			valueType = "enum",
+			enumType = "Material",
+			enumItems = MATERIALS,
+		},
+		{
+			name = "Shape",
+			category = "Part",
+			valueType = "enum",
+			enumType = "PartType",
+			enumItems = {
+				"Ball",
+				"Block",
+				"Cylinder",
+				"Wedge",
+				"CornerWedge",
+			},
+		},
 		{ name = "Size", category = "Transform", valueType = "Vector3" },
 		{ name = "Position", category = "Transform", valueType = "Vector3" },
 		{ name = "Orientation", category = "Transform", valueType = "Vector3" },
@@ -90,7 +102,13 @@ local BY_CLASS: { [string]: { EngineProp } } = {
 		{ name = "CanCollide", category = "Behavior", valueType = "boolean" },
 		{ name = "Transparency", category = "Appearance", valueType = "number" },
 		{ name = "Color", category = "Appearance", valueType = "Color3" },
-		{ name = "Material", category = "Appearance", valueType = "enum", enumType = "Material", enumItems = MATERIALS },
+		{
+			name = "Material",
+			category = "Appearance",
+			valueType = "enum",
+			enumType = "Material",
+			enumItems = MATERIALS,
+		},
 		{ name = "Size", category = "Transform", valueType = "Vector3" },
 		{ name = "Position", category = "Transform", valueType = "Vector3" },
 	},
@@ -123,12 +141,18 @@ local BY_CLASS: { [string]: { EngineProp } } = {
 	Script = {
 		{ name = "Name", category = "Data", valueType = "string" },
 		{ name = "Disabled", category = "Data", valueType = "boolean" },
-		{ name = "RunContext", category = "Data", valueType = "enum", enumType = "RunContext", enumItems = {
-			"Legacy",
-			"Server",
-			"Client",
-			"Plugin",
-		} },
+		{
+			name = "RunContext",
+			category = "Data",
+			valueType = "enum",
+			enumType = "RunContext",
+			enumItems = {
+				"Legacy",
+				"Server",
+				"Client",
+				"Plugin",
+			},
+		},
 	},
 	LocalScript = {
 		{ name = "Name", category = "Data", valueType = "string" },
@@ -212,6 +236,159 @@ local BY_CLASS: { [string]: { EngineProp } } = {
 		{ name = "FieldOfView", category = "Camera", valueType = "number" },
 		{ name = "CameraType", category = "Camera", valueType = "enum", enumType = "CameraType" },
 	},
+	BloomEffect = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Intensity", category = "Appearance", valueType = "number" },
+		{ name = "Size", category = "Appearance", valueType = "number" },
+		{ name = "Threshold", category = "Appearance", valueType = "number" },
+	},
+	BlurEffect = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Size", category = "Appearance", valueType = "number" },
+	},
+	ColorCorrectionEffect = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Brightness", category = "Appearance", valueType = "number" },
+		{ name = "Contrast", category = "Appearance", valueType = "number" },
+		{ name = "Saturation", category = "Appearance", valueType = "number" },
+		{ name = "TintColor", category = "Appearance", valueType = "Color3" },
+	},
+	DepthOfFieldEffect = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "FarIntensity", category = "Appearance", valueType = "number" },
+		{ name = "FocusDistance", category = "Appearance", valueType = "number" },
+		{ name = "InFocusRadius", category = "Appearance", valueType = "number" },
+		{ name = "NearIntensity", category = "Appearance", valueType = "number" },
+	},
+	SunRaysEffect = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Intensity", category = "Appearance", valueType = "number" },
+		{ name = "Spread", category = "Appearance", valueType = "number" },
+	},
+	Atmosphere = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Density", category = "Appearance", valueType = "number" },
+		{ name = "Offset", category = "Appearance", valueType = "number" },
+		{ name = "Color", category = "Appearance", valueType = "Color3" },
+		{ name = "Decay", category = "Appearance", valueType = "Color3" },
+		{ name = "Glare", category = "Appearance", valueType = "number" },
+		{ name = "Haze", category = "Appearance", valueType = "number" },
+	},
+	Sky = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "CelestialBodiesShown", category = "Appearance", valueType = "boolean" },
+		{ name = "StarCount", category = "Appearance", valueType = "number" },
+		{ name = "SkyboxBk", category = "Appearance", valueType = "string" },
+		{ name = "SkyboxDn", category = "Appearance", valueType = "string" },
+		{ name = "SkyboxFt", category = "Appearance", valueType = "string" },
+		{ name = "SkyboxLf", category = "Appearance", valueType = "string" },
+		{ name = "SkyboxRt", category = "Appearance", valueType = "string" },
+		{ name = "SkyboxUp", category = "Appearance", valueType = "string" },
+		{ name = "SunAngularSize", category = "Appearance", valueType = "number" },
+		{ name = "MoonAngularSize", category = "Appearance", valueType = "number" },
+	},
+	ParticleEmitter = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Texture", category = "Appearance", valueType = "string" },
+		{ name = "Rate", category = "Appearance", valueType = "number" },
+		{ name = "Lifetime", category = "Appearance", valueType = "number" },
+		{ name = "Drag", category = "Appearance", valueType = "number" },
+		{ name = "LightEmission", category = "Appearance", valueType = "number" },
+		{ name = "LightInfluence", category = "Appearance", valueType = "number" },
+		{ name = "Brightness", category = "Appearance", valueType = "number" },
+		{ name = "ZOffset", category = "Appearance", valueType = "number" },
+	},
+	Beam = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Texture", category = "Appearance", valueType = "string" },
+		{ name = "Width0", category = "Appearance", valueType = "number" },
+		{ name = "Width1", category = "Appearance", valueType = "number" },
+		{ name = "LightEmission", category = "Appearance", valueType = "number" },
+		{ name = "LightInfluence", category = "Appearance", valueType = "number" },
+		{ name = "Brightness", category = "Appearance", valueType = "number" },
+		{ name = "Segments", category = "Appearance", valueType = "number" },
+		{ name = "TextureSpeed", category = "Appearance", valueType = "number" },
+		{ name = "FaceCamera", category = "Appearance", valueType = "boolean" },
+	},
+	Fire = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Heat", category = "Appearance", valueType = "number" },
+		{ name = "Size", category = "Appearance", valueType = "number" },
+		{ name = "Color", category = "Appearance", valueType = "Color3" },
+		{ name = "SecondaryColor", category = "Appearance", valueType = "Color3" },
+	},
+	Smoke = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Opacity", category = "Appearance", valueType = "number" },
+		{ name = "RiseVelocity", category = "Appearance", valueType = "number" },
+		{ name = "Size", category = "Appearance", valueType = "number" },
+		{ name = "Color", category = "Appearance", valueType = "Color3" },
+	},
+	Trail = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Lifetime", category = "Appearance", valueType = "number" },
+		{ name = "MinLength", category = "Appearance", valueType = "number" },
+		{ name = "MaxLength", category = "Appearance", valueType = "number" },
+		{ name = "WidthScale", category = "Appearance", valueType = "number" },
+		{ name = "LightEmission", category = "Appearance", valueType = "number" },
+		{ name = "LightInfluence", category = "Appearance", valueType = "number" },
+		{ name = "Brightness", category = "Appearance", valueType = "number" },
+		{ name = "FaceCamera", category = "Appearance", valueType = "boolean" },
+	},
+	Decal = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Texture", category = "Appearance", valueType = "string" },
+		{ name = "Transparency", category = "Appearance", valueType = "number" },
+		{ name = "Color3", category = "Appearance", valueType = "Color3" },
+		{ name = "ZIndex", category = "Appearance", valueType = "number" },
+	},
+	Texture = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Texture", category = "Appearance", valueType = "string" },
+		{ name = "Transparency", category = "Appearance", valueType = "number" },
+		{ name = "Color3", category = "Appearance", valueType = "Color3" },
+		{ name = "StudsPerTileU", category = "Appearance", valueType = "number" },
+		{ name = "StudsPerTileV", category = "Appearance", valueType = "number" },
+		{ name = "OffsetStudsU", category = "Appearance", valueType = "number" },
+		{ name = "OffsetStudsV", category = "Appearance", valueType = "number" },
+	},
+}
+
+-- probe these when class has no curated list
+local REFLECT_PROPS: { EngineProp } = {
+	{ name = "Name", category = "Data", valueType = "string" },
+	{ name = "Enabled", category = "Data", valueType = "boolean" },
+	{ name = "Visible", category = "Data", valueType = "boolean" },
+	{ name = "Archivable", category = "Data", valueType = "boolean" },
+	{ name = "Intensity", category = "Appearance", valueType = "number" },
+	{ name = "Size", category = "Appearance", valueType = "number" },
+	{ name = "Threshold", category = "Appearance", valueType = "number" },
+	{ name = "Brightness", category = "Appearance", valueType = "number" },
+	{ name = "Contrast", category = "Appearance", valueType = "number" },
+	{ name = "Saturation", category = "Appearance", valueType = "number" },
+	{ name = "TintColor", category = "Appearance", valueType = "Color3" },
+	{ name = "Color", category = "Appearance", valueType = "Color3" },
+	{ name = "Color3", category = "Appearance", valueType = "Color3" },
+	{ name = "Transparency", category = "Appearance", valueType = "number" },
+	{ name = "Range", category = "Appearance", valueType = "number" },
+	{ name = "Angle", category = "Appearance", valueType = "number" },
+	{ name = "Spread", category = "Appearance", valueType = "number" },
+	{ name = "Density", category = "Appearance", valueType = "number" },
+	{ name = "Texture", category = "Appearance", valueType = "string" },
+	{ name = "SoundId", category = "Audio", valueType = "string" },
+	{ name = "Volume", category = "Audio", valueType = "number" },
+	{ name = "Position", category = "Transform", valueType = "Vector3" },
+	{ name = "Orientation", category = "Transform", valueType = "Vector3" },
 }
 
 -- Generic service fallback (read-only identity)
@@ -243,18 +420,25 @@ function EngineProps.forInstance(instance: Instance): { EngineProp }
 		if SERVICE_NAMES[instance.ClassName] or instance.Parent == game then
 			list = SERVICE_FALLBACK
 		else
-			list = BY_CLASS.Instance
+			-- reflect common props so classes like Bloom aren't empty
+			list = REFLECT_PROPS
 		end
 	end
 
 	local out = {}
+	local seen: { [string]: boolean } = {}
 	for _, prop in list do
 		local ok = pcall(function()
 			local _ = (instance :: any)[prop.name]
 		end)
-		if ok then
+		if ok and not seen[prop.name] then
+			seen[prop.name] = true
 			table.insert(out, prop)
 		end
+	end
+	-- always ensure Name shows
+	if not seen.Name then
+		table.insert(out, 1, { name = "Name", category = "Data", valueType = "string" })
 	end
 	return out
 end
