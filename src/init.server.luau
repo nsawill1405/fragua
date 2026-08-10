@@ -1,9 +1,9 @@
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local Selection = game:GetService("Selection")
+local ScriptEditorService = game:GetService("ScriptEditorService")
 
 local Explorer = require(script.App.Explorer)
 local Properties = require(script.App.Properties)
-local ScriptEditor = require(script.App.ScriptEditor)
 local SettingsStore = require(script.App.Settings.Store)
 local EnsurePlaceModules = require(script.App.Runtime.EnsurePlaceModules)
 local ScriptInjector = require(script.App.Runtime.ScriptInjector)
@@ -34,18 +34,8 @@ local propertiesBtn = toolbar:CreateButton(
 )
 propertiesBtn.ClickableWhenViewportHidden = true
 
-local scriptBtn = toolbar:CreateButton(
-	"FraguaScriptEditor",
-	"Open Fragua Script Editor",
-	"rbxasset://textures/StudioToolbox/Tabs/Inventory.png",
-	"Script Editor"
-)
-scriptBtn.ClickableWhenViewportHidden = true
-scriptBtn.Enabled = true
-
 local explorerInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Left, true, false, 320, 480, 240, 200)
 local propertiesInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, true, false, 320, 480, 240, 200)
-local scriptInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 520, 420, 320, 240)
 
 local explorerWidget = plugin:CreateDockWidgetPluginGuiAsync("FraguaExplorer", explorerInfo)
 explorerWidget.Title = "Fragua Explorer"
@@ -55,10 +45,6 @@ local propertiesWidget = plugin:CreateDockWidgetPluginGuiAsync("FraguaProperties
 propertiesWidget.Title = "Fragua Properties"
 propertiesWidget.Name = "FraguaProperties"
 
-local scriptWidget = plugin:CreateDockWidgetPluginGuiAsync("FraguaScriptEditor", scriptInfo)
-scriptWidget.Title = "Fragua Script"
-scriptWidget.Name = "FraguaScriptEditor"
-
 Registry.seedDefaults()
 TypeCatalog.sync(Registry)
 local catalogConnection = Registry.Changed:Connect(function()
@@ -67,10 +53,15 @@ end)
 Host.start()
 
 local explorerApi = Explorer.mount(explorerWidget)
-local scriptApi = ScriptEditor.mount(scriptWidget)
 local propertiesApi = Properties.mount(propertiesWidget, {
 	onEditScript = function(context)
-		scriptApi.openTarget(context)
+		task.spawn(function()
+			local ok, opened, err =
+				pcall(ScriptEditorService.OpenScriptDocumentAsync, ScriptEditorService, context.target)
+			if not ok or not opened then
+				warn(`[Fragua] Could not open {context.target:GetFullName()}: {tostring(if ok then err else opened)}`)
+			end
+		end)
 	end,
 })
 
@@ -84,24 +75,14 @@ propertiesBtn.Click:Connect(function()
 	propertiesBtn:SetActive(propertiesWidget.Enabled)
 end)
 
-scriptBtn.Click:Connect(function()
-	scriptWidget.Enabled = not scriptWidget.Enabled
-	scriptBtn:SetActive(scriptWidget.Enabled)
-end)
-
 explorerWidget:GetPropertyChangedSignal("Enabled"):Connect(function()
 	explorerBtn:SetActive(explorerWidget.Enabled)
 end)
 propertiesWidget:GetPropertyChangedSignal("Enabled"):Connect(function()
 	propertiesBtn:SetActive(propertiesWidget.Enabled)
 end)
-scriptWidget:GetPropertyChangedSignal("Enabled"):Connect(function()
-	scriptBtn:SetActive(scriptWidget.Enabled)
-end)
-
 explorerBtn:SetActive(explorerWidget.Enabled)
 propertiesBtn:SetActive(propertiesWidget.Enabled)
-scriptBtn:SetActive(scriptWidget.Enabled)
 
 Selection.SelectionChanged:Connect(function()
 	Host.onSelection(Selection:Get())
@@ -116,10 +97,6 @@ plugin.Unloading:Connect(function()
 	if propertiesApi and propertiesApi.destroy then
 		propertiesApi.destroy()
 	end
-	if scriptApi and scriptApi.destroy then
-		scriptApi.destroy()
-	end
 end)
 
 ChangeHistoryService:SetWaypoint("Fragua Ready")
-print("[Fragua] Plugin loaded - forge custom instance types in Explorer > Insert Object.")
