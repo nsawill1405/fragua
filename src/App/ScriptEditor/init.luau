@@ -66,7 +66,7 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 	local tabs = Instance.new("Frame")
 	tabs.BackgroundTransparency = 1
 	tabs.Position = UDim2.fromOffset(8, 6)
-	tabs.Size = UDim2.new(1, -162, 0, 32)
+	tabs.Size = UDim2.new(1, -254, 0, 32)
 	tabs.ClipsDescendants = true
 	tabs.Parent = top
 	local tabList = Instance.new("UIListLayout")
@@ -75,6 +75,8 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 	tabList.Padding = UDim.new(0, 4)
 	tabList.Parent = tabs
 
+	local openButton = Theme.makeButton(top, "Open selected", { Size = UDim2.fromOffset(88, 26) })
+	openButton.Position = UDim2.new(1, -242, 0, 6)
 	local findButton = Theme.makeButton(top, "Find", { Size = UDim2.fromOffset(54, 26) })
 	findButton.Position = UDim2.new(1, -146, 0, 6)
 	local saveButton = Theme.makeButton(top, "Save", { Size = UDim2.fromOffset(76, 26) })
@@ -337,6 +339,9 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 	end
 
 	saveButton.MouseButton1Click:Connect(save)
+	openButton.MouseButton1Click:Connect(function()
+		openFromInstance(Selection:Get()[1])
+	end)
 	findButton.MouseButton1Click:Connect(function()
 		findBar.Visible = not findBar.Visible
 		if findBar.Visible then
@@ -352,12 +357,6 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 	end)
 
 	local connections = {}
-	table.insert(
-		connections,
-		Selection.SelectionChanged:Connect(function()
-			openFromInstance(Selection:Get()[1])
-		end)
-	)
 	table.insert(
 		connections,
 		Registry.Changed:Connect(function()
