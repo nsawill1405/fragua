@@ -4,6 +4,7 @@ local Theme = require(script.Parent.Parent.Shared.Theme)
 local CompletionEngine = require(script.Parent.CompletionEngine)
 local Diagnostics = require(script.Parent.Diagnostics)
 local EditorLayout = require(script.Parent.EditorLayout)
+local SyntaxHighlighter = require(script.Parent.SyntaxHighlighter)
 
 local CodeCanvas = {}
 
@@ -64,6 +65,30 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	divider.Size = UDim2.new(0, 1, 1, 0)
 	divider.Parent = content
 
+	local highlight = Instance.new("TextLabel")
+	highlight.Name = "Highlight"
+	highlight.BackgroundTransparency = 1
+	highlight.BorderSizePixel = 0
+	highlight.Position = UDim2.fromOffset(45, 0)
+	highlight.Size = UDim2.new(1, -45, 1, 0)
+	highlight.Font = Theme.fontMono
+	highlight.TextSize = 13
+	highlight.LineHeight = 1.35
+	highlight.TextColor3 = Theme.textBright
+	highlight.TextXAlignment = Enum.TextXAlignment.Left
+	highlight.TextYAlignment = Enum.TextYAlignment.Top
+	highlight.TextWrapped = false
+	highlight.RichText = true
+	highlight.Text = ""
+	highlight.ZIndex = 1
+	highlight.Parent = content
+	local highlightPadding = Instance.new("UIPadding")
+	highlightPadding.PaddingTop = UDim.new(0, 10)
+	highlightPadding.PaddingBottom = UDim.new(0, 10)
+	highlightPadding.PaddingLeft = UDim.new(0, 12)
+	highlightPadding.PaddingRight = UDim.new(0, 12)
+	highlightPadding.Parent = highlight
+
 	local editor = Instance.new("TextBox")
 	editor.Name = "Editor"
 	editor.ClearTextOnFocus = false
@@ -75,11 +100,14 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	editor.TextSize = 13
 	editor.LineHeight = 1.35
 	editor.TextColor3 = Theme.textBright
+	editor.TextTransparency = 1
+	editor.SelectionColor3 = Theme.bgSelected
 	editor.BackgroundTransparency = 1
 	editor.BorderSizePixel = 0
 	editor.Position = UDim2.fromOffset(45, 0)
 	editor.Size = UDim2.new(1, -45, 1, 0)
 	editor.Text = ""
+	editor.ZIndex = 2
 	editor.Parent = content
 	local editorPadding = Instance.new("UIPadding")
 	editorPadding.PaddingTop = UDim.new(0, 10)
@@ -110,6 +138,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	local suggestions = {}
 	local selectedIndex = 1
 	local suppressChange = false
+	local highlightGeneration = 0
 	local metrics = {
 		charWidth = 7.8,
 		lineHeight = 18,
@@ -126,6 +155,24 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		gutter.Size = UDim2.fromOffset(metrics.gutterWidth, size.height)
 		divider.Size = UDim2.fromOffset(1, size.height)
 		editor.Size = UDim2.fromOffset(math.max(1, size.width - 45), size.height)
+		highlight.Size = editor.Size
+	end
+
+	local function fallbackRichText(source: string): string
+		local safe = source:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+		return safe
+	end
+
+	local function scheduleHighlight()
+		highlightGeneration += 1
+		local generation = highlightGeneration
+		task.defer(function()
+			if generation ~= highlightGeneration or not root.Parent then
+				return
+			end
+			local ok, richText = pcall(SyntaxHighlighter.render, editor.Text, context)
+			highlight.Text = if ok then richText else fallbackRichText(editor.Text)
+		end)
 	end
 
 	local function updateGutter()
@@ -233,6 +280,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 
 	editor:GetPropertyChangedSignal("Text"):Connect(function()
 		updateGutter()
+		scheduleHighlight()
 		if not suppressChange and options.onChanged then
 			options.onChanged(editor.Text, editor.CursorPosition, editor.SelectionStart)
 		end
@@ -284,6 +332,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		end,
 		setContext = function(nextContext)
 			context = nextContext or { schema = {}, typeIds = {} }
+			scheduleHighlight()
 			refreshAssistance()
 		end,
 		focus = function()
