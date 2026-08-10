@@ -101,7 +101,6 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	editor.LineHeight = 1.35
 	editor.TextColor3 = Theme.textBright
 	editor.TextTransparency = 1
-	editor.SelectionColor3 = Theme.bgSelected
 	editor.BackgroundTransparency = 1
 	editor.BorderSizePixel = 0
 	editor.Position = UDim2.fromOffset(45, 0)
