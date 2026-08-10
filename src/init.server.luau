@@ -100,6 +100,9 @@ plugin.Unloading:Connect(function()
 	if explorerApi and explorerApi.destroy then
 		explorerApi.destroy()
 	end
+	if propertiesApi and propertiesApi.destroy then
+		propertiesApi.destroy()
+	end
 end)
 
 -- Keep ChangeHistoryService referenced so waypoints from panels stay meaningful in undo stack.

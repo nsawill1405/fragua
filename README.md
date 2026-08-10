@@ -106,14 +106,13 @@ fragua/
   default.project.json
   aftman.toml
   src/
-    Plugin.server.lua
+    init.server.luau          # plugin entry (toolbar + docks)
     App/
-      Explorer/
-      Properties/
-      Types/
-      Behaviors/
-      Shared/
-      Assets/
+      Explorer/               # tree + Insert Object picker
+      Properties/             # property grid
+      Types/                  # registry, schemas, icon picker, type editor
+      Behaviors/              # edit-time behavior host
+      Shared/                 # theme, constants, util
   templates/
 ```
 

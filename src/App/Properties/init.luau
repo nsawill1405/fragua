@@ -299,15 +299,24 @@ function Properties.mount(widget: DockWidgetPluginGui)
 		end))
 	end
 
-	Selection.SelectionChanged:Connect(rebuild)
-	Registry.Changed:Connect(function()
+	local lifetime: { RBXScriptConnection } = {}
+	table.insert(lifetime, Selection.SelectionChanged:Connect(rebuild))
+	table.insert(lifetime, Registry.Changed:Connect(function()
 		task.defer(rebuild)
-	end)
+	end))
 	rebuild()
 
 	return {
 		root = root,
 		rebuild = rebuild,
+		destroy = function()
+			clearConns()
+			for _, c in lifetime do
+				c:Disconnect()
+			end
+			table.clear(lifetime)
+			root:Destroy()
+		end,
 	}
 end
 
