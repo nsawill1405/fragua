@@ -12,6 +12,10 @@ return {
 		assert(ok and PropertyRefreshPolicy, "PropertyRefreshPolicy should be available")
 		assert(PropertyRefreshPolicy.action("attribute", "Health") == "update")
 	end,
+	["attribute type changes rebuild incompatible controls"] = function()
+		assert(ok and PropertyRefreshPolicy, "PropertyRefreshPolicy should be available")
+		assert(PropertyRefreshPolicy.action("attribute", "Tint", "number", "Color3") == "rebuild")
+	end,
 	["type identity changes rebuild the schema"] = function()
 		assert(ok and PropertyRefreshPolicy, "PropertyRefreshPolicy should be available")
 		assert(PropertyRefreshPolicy.action("attribute", "_FraguaType") == "rebuild")

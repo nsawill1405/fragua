@@ -110,6 +110,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 	local collapsedSections: { [string]: boolean } = {}
 	local propertyUpdaters: { [string]: (any) -> () } = {}
 	local attributeUpdaters: { [string]: (any) -> () } = {}
+	local attributeValueTypes: { [string]: string } = {}
 	local previewingProperties: { [string]: boolean } = {}
 	local previewingAttributes: { [string]: boolean } = {}
 
@@ -222,6 +223,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				propertyUpdaters[prop.name] = update
 			elseif prop.changeKind == "attribute" then
 				attributeUpdaters[prop.name] = update
+				attributeValueTypes[prop.name] = typeof(prop.value)
 			end
 		end
 
@@ -403,6 +405,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			clearRows()
 			table.clear(propertyUpdaters)
 			table.clear(attributeUpdaters)
+			table.clear(attributeValueTypes)
 			local list = Selection:Get()
 			current = list[1]
 			if current and not current:IsDescendantOf(game) then
@@ -600,7 +603,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				host = root,
 				push = push,
 				schemaNames = schemaNames,
-				isFragua = isFragua,
+				isFragua = Registry.getTypeId(current) ~= nil,
 				requestRebuild = function()
 					task.defer(rebuild)
 				end,
@@ -667,14 +670,21 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					if current ~= selected then
 						return
 					end
-					if PropertyRefreshPolicy.action("attribute", attributeName) == "rebuild" then
+					local nextValue = selected:GetAttribute(attributeName)
+					if
+						PropertyRefreshPolicy.action(
+							"attribute",
+							attributeName,
+							attributeValueTypes[attributeName],
+							typeof(nextValue)
+						) == "rebuild"
+					then
 						task.defer(rebuild)
 						return
 					end
 					if previewingAttributes[attributeName] then
 						return
 					end
-					local nextValue = selected:GetAttribute(attributeName)
 					local update = attributeUpdaters[attributeName]
 					if update and nextValue ~= nil then
 						update(nextValue)
