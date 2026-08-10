@@ -44,4 +44,19 @@ return {
 		assert(layers.panel > layers.overlay)
 		assert(layers.menu > layers.panel)
 	end,
+	["minimum metadata dialog keeps three footer actions separate"] = function()
+		assert(ok and MetadataModel, "MetadataModel should be available")
+		assert(MetadataModel.dialogGeometry, "dialogGeometry should be available")
+		local geometry = MetadataModel.dialogGeometry(240, 200, 260, true)
+		assert(geometry.panel.width <= 216 and geometry.panel.height <= 184)
+		assert(geometry.deleteButton.x + geometry.deleteButton.width <= geometry.cancelButton.x)
+		assert(geometry.cancelButton.x + geometry.cancelButton.width <= geometry.saveButton.x)
+		assert(geometry.saveButton.x + geometry.saveButton.width <= geometry.panel.width - 12)
+	end,
+	["resized metadata dialog remains inside its host"] = function()
+		assert(ok and MetadataModel, "MetadataModel should be available")
+		assert(MetadataModel.dialogGeometry, "dialogGeometry should be available")
+		local geometry = MetadataModel.dialogGeometry(320, 240, 260, true)
+		assert(geometry.panel.width <= 296 and geometry.panel.height <= 224)
+	end,
 }

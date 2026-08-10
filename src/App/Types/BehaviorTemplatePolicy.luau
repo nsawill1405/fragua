@@ -30,7 +30,7 @@ function BehaviorTemplatePolicy.plan(sources: { string }, generatedSource: strin
 end
 
 function BehaviorTemplatePolicy.backupFolderName(existing: { [string]: string }): string
-	if existing.BehaviorBackups == "Folder" then
+	if existing.BehaviorBackups == nil or existing.BehaviorBackups == "Folder" then
 		return "BehaviorBackups"
 	end
 	local base = "BehaviorBackups_Fragua"

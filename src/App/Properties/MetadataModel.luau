@@ -55,6 +55,33 @@ function MetadataModel.modalLayers(overlay: number)
 	}
 end
 
+function MetadataModel.dialogGeometry(hostWidth: number, hostHeight: number, desiredHeight: number, hasDelete: boolean)
+	local panelWidth = math.min(math.max(hostWidth - 24, 1), 360)
+	local panelHeight = math.min(math.max(hostHeight - 16, 1), desiredHeight)
+	local padding = math.min(12, math.floor(panelWidth / 4))
+	local gap = math.min(8, math.max(math.floor((panelWidth - padding * 2) / 20), 2))
+	local innerWidth = math.max(panelWidth - padding * 2, 1)
+
+	if hasDelete then
+		local buttonWidth = math.max(math.floor((innerWidth - gap * 2) / 3), 1)
+		return {
+			panel = { width = panelWidth, height = panelHeight },
+			deleteButton = { x = padding, width = buttonWidth },
+			cancelButton = { x = padding + buttonWidth + gap, width = buttonWidth },
+			saveButton = { x = padding + (buttonWidth + gap) * 2, width = buttonWidth },
+		}
+	end
+
+	local buttonWidth = math.min(72, math.max(math.floor((innerWidth - gap) / 2), 1))
+	local saveX = panelWidth - padding - buttonWidth
+	return {
+		panel = { width = panelWidth, height = panelHeight },
+		deleteButton = nil,
+		cancelButton = { x = saveX - gap - buttonWidth, width = buttonWidth },
+		saveButton = { x = saveX, width = buttonWidth },
+	}
+end
+
 function MetadataModel.isProtectedAttribute(name: string): boolean
 	return name == "_FraguaType"
 end

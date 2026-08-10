@@ -682,7 +682,15 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			for _, tag in CollectionService:GetAllTags() do
 				watchTag(tag)
 			end
-			table.insert(conns, CollectionService.TagAdded:Connect(watchTag))
+			table.insert(
+				conns,
+				CollectionService.TagAdded:Connect(function(tag)
+					watchTag(tag)
+					if current == selected and CollectionService:HasTag(selected, tag) then
+						task.defer(rebuild)
+					end
+				end)
+			)
 			table.insert(
 				conns,
 				CollectionService.TagRemoved:Connect(function()
