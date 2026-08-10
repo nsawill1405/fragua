@@ -49,4 +49,20 @@ return {
 		})
 		assert(locals[1].label == "damage")
 	end,
+	["includes inherited origin in property details"] = function()
+		local source = 'instance:GetAttribute("He'
+		local items = CompletionEngine.complete({
+			source = source,
+			cursor = #source + 1,
+			schema = { { name = "Health", valueType = "number", origin = "Character", inherited = true } },
+			typeIds = { "Character" },
+		})
+		assert(items[1].label == "Health")
+		assert(items[1].detail:find("Character", 1, true))
+	end,
+	["completes common Roblox members"] = function()
+		local source = "game:GetS"
+		local items = CompletionEngine.complete({ source = source, cursor = #source + 1, schema = {}, typeIds = {} })
+		assert(items[1].label == "GetService")
+	end,
 }
