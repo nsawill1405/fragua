@@ -23,4 +23,14 @@ return {
 		assert(plan.keep == 1)
 		assert(#plan.discard == 1 and #plan.backup == 0)
 	end,
+	["backup folder naming never replaces a colliding object"] = function()
+		assert(ok and Policy, "BehaviorTemplatePolicy should be available")
+		assert(Policy.backupFolderName, "backupFolderName should be available")
+		assert(Policy.backupFolderName({ BehaviorBackups = "ModuleScript" }) == "BehaviorBackups_Fragua")
+		assert(
+			Policy.backupFolderName({ BehaviorBackups = "ModuleScript", BehaviorBackups_Fragua = "Folder" })
+				== "BehaviorBackups_Fragua2"
+		)
+		assert(Policy.backupFolderName({ BehaviorBackups = "Folder" }) == "BehaviorBackups")
+	end,
 }

@@ -10,6 +10,31 @@ local MetadataEditor = {}
 
 local ATTRIBUTE_TYPES = { "string", "number", "boolean", "Color3", "Vector3" }
 
+local function safeMutation(instance: Instance, label: string, mutate: () -> (), onError: ((string) -> ())?): boolean
+	if not instance:IsDescendantOf(game) then
+		local message = "The selected instance is no longer in the active DataModel."
+		if onError then
+			onError(message)
+		else
+			warn("[Fragua] " .. message)
+		end
+		return false
+	end
+	ChangeHistoryService:SetWaypoint(label)
+	local ok, err = pcall(mutate)
+	ChangeHistoryService:SetWaypoint(label .. " Done")
+	if not ok then
+		local message = tostring(err)
+		if onError then
+			onError(message)
+		else
+			warn(`[Fragua] {label}: {message}`)
+		end
+		return false
+	end
+	return true
+end
+
 local function closeOverlay(overlay: Instance)
 	if overlay.Parent then
 		overlay:Destroy()
@@ -17,26 +42,26 @@ local function closeOverlay(overlay: Instance)
 end
 
 local function makeDialog(host: GuiObject, titleText: string, height: number)
+	local layers = MetadataModel.modalLayers(150)
 	local overlay = Instance.new("Frame")
 	overlay.Name = "MetadataDialog"
 	overlay.BackgroundColor3 = Color3.new(0, 0, 0)
 	overlay.BackgroundTransparency = 0.35
 	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.ZIndex = 150
+	overlay.ZIndex = layers.overlay
 	overlay.Parent = host
 
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.new(1, -24, 0, height)
+	panel.Size = UDim2.fromOffset(
+		math.min(math.max(host.AbsoluteSize.X - 24, 1), 360),
+		math.min(math.max(host.AbsoluteSize.Y - 16, 1), height)
+	)
 	panel.BackgroundColor3 = Theme.bg
 	panel.BorderSizePixel = 0
-	panel.ZIndex = 151
+	panel.ZIndex = layers.panel
 	panel.Parent = overlay
-	local sizeConstraint = Instance.new("UISizeConstraint")
-	sizeConstraint.MaxSize = Vector2.new(360, height)
-	sizeConstraint.MinSize = Vector2.new(180, height)
-	sizeConstraint.Parent = panel
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = Theme.corner
 	corner.Parent = panel
@@ -53,8 +78,20 @@ local function makeDialog(host: GuiObject, titleText: string, height: number)
 	title.TextColor3 = Theme.textBright
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Text = titleText
-	title.ZIndex = 152
+	title.ZIndex = layers.panel + 1
 	title.Parent = panel
+
+	local content = Instance.new("ScrollingFrame")
+	content.Name = "Content"
+	content.BackgroundTransparency = 1
+	content.BorderSizePixel = 0
+	content.Position = UDim2.fromOffset(0, 32)
+	content.Size = UDim2.new(1, 0, 1, -80)
+	content.ScrollBarThickness = 4
+	content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	content.CanvasSize = UDim2.new()
+	content.ZIndex = layers.panel + 1
+	content.Parent = panel
 
 	local errorLabel = Instance.new("TextLabel")
 	errorLabel.BackgroundTransparency = 1
@@ -66,13 +103,13 @@ local function makeDialog(host: GuiObject, titleText: string, height: number)
 	errorLabel.TextXAlignment = Enum.TextXAlignment.Left
 	errorLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	errorLabel.Text = ""
-	errorLabel.ZIndex = 152
+	errorLabel.ZIndex = layers.panel + 1
 	errorLabel.Parent = panel
 
 	local cancel = Theme.makeButton(panel, "Cancel", { Size = UDim2.fromOffset(72, 28) })
 	cancel.AnchorPoint = Vector2.new(1, 1)
 	cancel.Position = UDim2.new(1, -92, 1, -12)
-	cancel.ZIndex = 152
+	cancel.ZIndex = layers.panel + 1
 	cancel.MouseButton1Click:Connect(function()
 		closeOverlay(overlay)
 	end)
@@ -81,9 +118,9 @@ local function makeDialog(host: GuiObject, titleText: string, height: number)
 	save.AnchorPoint = Vector2.new(1, 1)
 	save.Position = UDim2.new(1, -12, 1, -12)
 	save.BackgroundColor3 = Theme.accent
-	save.ZIndex = 152
+	save.ZIndex = layers.panel + 1
 
-	return overlay, panel, errorLabel, save
+	return overlay, panel, content, errorLabel, save, layers
 end
 
 local function makeLabel(panel: GuiObject, text: string, y: number)
@@ -122,9 +159,9 @@ local function makeBox(panel: GuiObject, y: number, text: string, placeholder: s
 end
 
 local function openTagDialog(host: GuiObject, instance: Instance, requestRebuild: () -> ())
-	local overlay, panel, errorLabel, save = makeDialog(host, "Add Tag", 150)
-	makeLabel(panel, "Tag name", 36)
-	local nameBox = makeBox(panel, 52, "", "Enemy")
+	local overlay, _, content, errorLabel, save = makeDialog(host, "Add Tag", 150)
+	makeLabel(content, "Tag name", 4)
+	local nameBox = makeBox(content, 20, "", "Enemy")
 	save.Text = "Add"
 	save.MouseButton1Click:Connect(function()
 		local name = MetadataModel.normalizeName(nameBox.Text)
@@ -132,13 +169,12 @@ local function openTagDialog(host: GuiObject, instance: Instance, requestRebuild
 			errorLabel.Text = "Tag name is required."
 			return
 		end
-		local ok, err = pcall(function()
-			ChangeHistoryService:SetWaypoint("Fragua Add Tag")
+		local ok = safeMutation(instance, "Fragua Add Tag", function()
 			CollectionService:AddTag(instance, name)
-			ChangeHistoryService:SetWaypoint("Fragua Add Tag Done")
+		end, function(mutationError)
+			errorLabel.Text = mutationError
 		end)
 		if not ok then
-			errorLabel.Text = tostring(err)
 			return
 		end
 		closeOverlay(overlay)
@@ -148,36 +184,45 @@ local function openTagDialog(host: GuiObject, instance: Instance, requestRebuild
 end
 
 local function attributeType(value: any): string
-	local valueType = typeof(value)
-	if table.find(ATTRIBUTE_TYPES, valueType) then
-		return valueType
-	end
-	return "string"
+	return typeof(value)
 end
 
 local function openAttributeDialog(host: GuiObject, instance: Instance, previousName: string?, requestRebuild: () -> ())
 	local previousValue = if previousName then instance:GetAttribute(previousName) else nil
-	local selectedType = if previousValue ~= nil then attributeType(previousValue) else "string"
+	local originalType = if previousValue ~= nil then attributeType(previousValue) else nil
+	local selectedType = originalType or "string"
 	local startingValue = if previousValue ~= nil then previousValue else MetadataModel.defaultFor(selectedType)
-	local overlay, panel, errorLabel, save =
+	local overlay, panel, content, errorLabel, save, layers =
 		makeDialog(host, if previousName then "Edit Attribute" else "Add Attribute", 260)
 
-	makeLabel(panel, "Name", 36)
-	local nameBox = makeBox(panel, 52, previousName or "", "Score")
-	makeLabel(panel, "Type", 86)
+	makeLabel(content, "Name", 4)
+	local nameBox = makeBox(content, 20, previousName or "", "Score")
+	makeLabel(content, "Type", 54)
 	local typeHost = Instance.new("Frame")
 	typeHost.BackgroundTransparency = 1
-	typeHost.Position = UDim2.fromOffset(12, 102)
+	typeHost.Position = UDim2.fromOffset(12, 70)
 	typeHost.Size = UDim2.new(1, -24, 0, 28)
-	typeHost.ZIndex = 152
-	typeHost.Parent = panel
+	typeHost.ZIndex = layers.panel + 1
+	typeHost.Parent = content
 
-	makeLabel(panel, "Value", 136)
-	local valueBox = makeBox(panel, 152, Util.formatValue(startingValue), "value")
-	local typeButton = Controls.enumDropdown(typeHost, ATTRIBUTE_TYPES, selectedType, function(nextType)
+	makeLabel(content, "Value", 104)
+	local valueBox = makeBox(content, 120, Util.formatValue(startingValue), "value")
+	valueBox.TextEditable = MetadataModel.isSupportedType(selectedType)
+	valueBox.TextColor3 = if valueBox.TextEditable then Theme.textBright else Theme.textMuted
+	local typeChoices = table.clone(ATTRIBUTE_TYPES)
+	if not MetadataModel.isSupportedType(selectedType) then
+		table.insert(typeChoices, 1, selectedType)
+	end
+	local typeButton = Controls.enumDropdown(typeHost, typeChoices, selectedType, function(nextType)
 		selectedType = nextType
-		valueBox.Text = Util.formatValue(MetadataModel.defaultFor(nextType))
-	end)
+		valueBox.TextEditable = MetadataModel.isSupportedType(nextType)
+		valueBox.TextColor3 = if valueBox.TextEditable then Theme.textBright else Theme.textMuted
+		if valueBox.TextEditable then
+			valueBox.Text = Util.formatValue(MetadataModel.defaultFor(nextType))
+		else
+			valueBox.Text = Util.formatValue(previousValue)
+		end
+	end, nil, { host = overlay, zIndex = layers.menu })
 	typeButton.Size = UDim2.fromScale(1, 1)
 	typeButton.ZIndex = 153
 	if previousName and not MetadataModel.isProtectedAttribute(previousName) then
@@ -187,11 +232,16 @@ local function openAttributeDialog(host: GuiObject, instance: Instance, previous
 		deleteButton.TextColor3 = Theme.danger
 		deleteButton.ZIndex = 152
 		deleteButton.MouseButton1Click:Connect(function()
-			ChangeHistoryService:SetWaypoint("Fragua Delete Attribute")
-			instance:SetAttribute(previousName, nil)
-			ChangeHistoryService:SetWaypoint("Fragua Delete Attribute Done")
-			closeOverlay(overlay)
-			requestRebuild()
+			if
+				safeMutation(instance, "Fragua Delete Attribute", function()
+					instance:SetAttribute(previousName, nil)
+				end, function(message)
+					errorLabel.Text = message
+				end)
+			then
+				closeOverlay(overlay)
+				requestRebuild()
+			end
 		end)
 	end
 
@@ -210,22 +260,28 @@ local function openAttributeDialog(host: GuiObject, instance: Instance, previous
 			errorLabel.Text = "Fragua identity metadata is protected."
 			return
 		end
-		local parsed, nextValue = Util.parseValue(selectedType, valueBox.Text)
-		if not parsed then
-			errorLabel.Text = "Enter a valid " .. selectedType .. " value."
+		local parsed = true
+		local nextValue = previousValue
+		if MetadataModel.isSupportedType(selectedType) then
+			parsed, nextValue = Util.parseValue(selectedType, valueBox.Text)
+			if not parsed then
+				errorLabel.Text = "Enter a valid " .. selectedType .. " value."
+				return
+			end
+		elseif selectedType ~= originalType or previousValue == nil then
+			errorLabel.Text = "Choose a supported type to replace this value."
 			return
 		end
 		local changedShape = previousName ~= name or attributeType(previousValue) ~= selectedType
-		local ok, err = pcall(function()
-			ChangeHistoryService:SetWaypoint("Fragua Attribute")
+		local ok = safeMutation(instance, "Fragua Attribute", function()
 			instance:SetAttribute(name, nextValue)
 			if previousName and previousName ~= name then
 				instance:SetAttribute(previousName, nil)
 			end
-			ChangeHistoryService:SetWaypoint("Fragua Attribute Done")
+		end, function(mutationError)
+			errorLabel.Text = mutationError
 		end)
 		if not ok then
-			errorLabel.Text = tostring(err)
 			return
 		end
 		closeOverlay(overlay)
@@ -254,6 +310,7 @@ function MetadataEditor.appendRows(context)
 	local tags = CollectionService:GetTags(instance)
 	table.sort(tags)
 	for _, tag in tags do
+		local capturedTag = tag
 		local protected = MetadataModel.isProtectedTag(tag, isFragua)
 		push("Tags", {
 			name = tag,
@@ -264,10 +321,13 @@ function MetadataEditor.appendRows(context)
 				if protected then
 					return
 				end
-				ChangeHistoryService:SetWaypoint("Fragua Remove Tag")
-				CollectionService:RemoveTag(instance, tag)
-				ChangeHistoryService:SetWaypoint("Fragua Remove Tag Done")
-				requestRebuild()
+				if
+					safeMutation(instance, "Fragua Remove Tag", function()
+						CollectionService:RemoveTag(instance, capturedTag)
+					end, nil)
+				then
+					requestRebuild()
+				end
 			end,
 		})
 	end
@@ -292,17 +352,25 @@ function MetadataEditor.appendRows(context)
 	for _, name in names do
 		local value = attributes[name]
 		local protected = MetadataModel.isProtectedAttribute(name)
+		local supported = MetadataModel.isSupportedType(typeof(value))
 		local capturedName = name
 		push("Attributes", {
 			name = name,
 			valueType = Util.attributeTypeName(value),
 			value = value,
-			readonly = protected,
+			readonly = protected or not supported,
 			onCommit = function(nextValue)
-				instance:SetAttribute(capturedName, nextValue)
+				safeMutation(instance, "Fragua Attribute", function()
+					instance:SetAttribute(capturedName, nextValue)
+				end, nil)
 			end,
 			onPreview = function(nextValue)
-				instance:SetAttribute(capturedName, nextValue)
+				if instance:IsDescendantOf(game) then
+					local ok, err = pcall(instance.SetAttribute, instance, capturedName, nextValue)
+					if not ok then
+						warn(`[Fragua] Attribute preview: {tostring(err)}`)
+					end
+				end
 			end,
 			changeKind = "attribute",
 		})

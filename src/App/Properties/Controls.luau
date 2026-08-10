@@ -12,7 +12,8 @@ function Controls.enumDropdown(
 	items: { string },
 	current: string,
 	onPick: (string) -> (),
-	_enumType: string?
+	_enumType: string?,
+	options: { host: GuiObject?, zIndex: number? }?
 ): TextButton
 	local btn = Instance.new("TextButton")
 	btn.AutoButtonColor = false
@@ -50,12 +51,13 @@ function Controls.enumDropdown(
 		end
 		open = true
 
-		local host = UiUtil.dockHost(parent)
+		local host = if options and options.host then options.host else UiUtil.dockHost(parent)
+		local menuZIndex = if options and options.zIndex then options.zIndex else 100
 		local drop = Instance.new("ScrollingFrame")
 		drop.Name = "EnumMenu"
 		drop.BackgroundColor3 = Theme.bgRaised
 		drop.BorderSizePixel = 0
-		drop.ZIndex = 100
+		drop.ZIndex = menuZIndex
 		drop.ScrollBarThickness = 4
 		drop.AutomaticCanvasSize = Enum.AutomaticSize.Y
 		drop.CanvasSize = UDim2.new()
@@ -97,7 +99,7 @@ function Controls.enumDropdown(
 			opt.TextXAlignment = Enum.TextXAlignment.Left
 			opt.Text = "  " .. item
 			opt.LayoutOrder = i
-			opt.ZIndex = 101
+			opt.ZIndex = menuZIndex + 1
 			opt.Parent = drop
 
 			local oc = Instance.new("UICorner")

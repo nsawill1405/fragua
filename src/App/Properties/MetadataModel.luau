@@ -1,4 +1,11 @@
 local MetadataModel = {}
+local SUPPORTED_TYPES = {
+	string = true,
+	number = true,
+	boolean = true,
+	Color3 = true,
+	Vector3 = true,
+}
 
 function MetadataModel.normalizeName(name: string): string
 	return string.gsub(name, "^%s*(.-)%s*$", "%1")
@@ -34,6 +41,18 @@ function MetadataModel.defaultFor(valueType: string, constructors: any?): any
 		return vector3.zero
 	end
 	return nil
+end
+
+function MetadataModel.isSupportedType(valueType: string): boolean
+	return SUPPORTED_TYPES[valueType] == true
+end
+
+function MetadataModel.modalLayers(overlay: number)
+	return {
+		overlay = overlay,
+		panel = overlay + 1,
+		menu = overlay + 10,
+	}
 end
 
 function MetadataModel.isProtectedAttribute(name: string): boolean

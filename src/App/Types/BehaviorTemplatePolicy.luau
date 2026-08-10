@@ -29,4 +29,18 @@ function BehaviorTemplatePolicy.plan(sources: { string }, generatedSource: strin
 	}
 end
 
+function BehaviorTemplatePolicy.backupFolderName(existing: { [string]: string }): string
+	if existing.BehaviorBackups == "Folder" then
+		return "BehaviorBackups"
+	end
+	local base = "BehaviorBackups_Fragua"
+	local candidate = base
+	local suffix = 1
+	while existing[candidate] do
+		suffix += 1
+		candidate = base .. tostring(suffix)
+	end
+	return candidate
+end
+
 return BehaviorTemplatePolicy
