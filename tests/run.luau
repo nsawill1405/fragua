@@ -19,4 +19,5 @@ TestRunner.run({
 	EnginePropResolver = require("./EnginePropResolver.spec"),
 	ScriptHeader = require("./ScriptHeader.spec"),
 	TypeCatalog = require("./TypeCatalog.spec"),
+	ApiSource = require("./ApiSource.spec"),
 })
