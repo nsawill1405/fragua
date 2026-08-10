@@ -4,6 +4,7 @@ local HttpService = game:GetService("HttpService")
 local ServerStorage = game:GetService("ServerStorage")
 
 local Constants = require(script.Parent.Parent.Shared.Constants)
+local BehaviorTemplatePolicy = require(script.Parent.BehaviorTemplatePolicy)
 local EngineSchemas = require(script.Parent.EngineSchemas)
 local SchemaMigration = require(script.Parent.SchemaMigration)
 local SchemaResolver = require(script.Parent.SchemaResolver)
@@ -410,13 +411,8 @@ function Registry.seedDefaults()
 	})
 
 	-- Replace default behavior with nameplate demo for Zombie
-	local module = Registry.typesFolder():FindFirstChild("Zombie")
-	if module and module:IsA("ModuleScript") then
-		-- behavior is on instances; seed template stored beside type
-		local template = Instance.new("ModuleScript")
-		template.Name = "ZombieBehavior"
-		template:SetAttribute("_FraguaSharedBehavior", true)
-		template.Source = [[
+	local template = Registry.ensureBehaviorTemplate("Zombie")
+	template.Source = [[
 local Behavior = {}
 
 local function ensureNameplate(instance)
@@ -481,8 +477,6 @@ end
 
 return Behavior
 ]]
-		template.Parent = Registry.typesFolder()
-	end
 end
 
 local function defaultBehaviorSource(typeId: string): string
@@ -514,12 +508,61 @@ local function defaultBehaviorSource(typeId: string): string
 	}, "\n")
 end
 
-function Registry.getSharedBehavior(typeId: string): ModuleScript?
-	local template = Registry.typesFolder():FindFirstChild(typeId .. "Behavior")
-	if template and template:IsA("ModuleScript") then
-		return template
+local function ensureBehaviorBackups(): Folder
+	local root = Registry.ensureRoot()
+	local existing = root:FindFirstChild("BehaviorBackups")
+	if existing and existing:IsA("Folder") then
+		return existing
 	end
-	return nil
+	if existing then
+		existing:Destroy()
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = "BehaviorBackups"
+	folder.Parent = root
+	return folder
+end
+
+function Registry.canonicalizeBehaviorTemplate(typeId: string): ModuleScript?
+	local behaviorName = typeId .. "Behavior"
+	local candidates = {}
+	local sources = {}
+	for _, child in Registry.typesFolder():GetChildren() do
+		if child.Name == behaviorName and child:IsA("ModuleScript") then
+			table.insert(candidates, child)
+			table.insert(sources, child.Source)
+		end
+	end
+	if #candidates == 0 then
+		return nil
+	end
+
+	local plan = BehaviorTemplatePolicy.plan(sources, defaultBehaviorSource(typeId))
+	local canonical = candidates[plan.keep]
+	canonical.Name = behaviorName
+	canonical:SetAttribute("_FraguaSharedBehavior", true)
+
+	for _, index in plan.backup do
+		local backup = candidates[index]
+		backup:SetAttribute("_FraguaSharedBehavior", nil)
+		local backups = ensureBehaviorBackups()
+		local suffix = 1
+		local backupName = typeId .. "BehaviorBackup" .. tostring(suffix)
+		while backups:FindFirstChild(backupName) do
+			suffix += 1
+			backupName = typeId .. "BehaviorBackup" .. tostring(suffix)
+		end
+		backup.Name = backupName
+		backup.Parent = backups
+	end
+	for _, index in plan.discard do
+		candidates[index]:Destroy()
+	end
+	return canonical
+end
+
+function Registry.getSharedBehavior(typeId: string): ModuleScript?
+	return Registry.canonicalizeBehaviorTemplate(typeId)
 end
 
 function Registry.ensureBehaviorTemplate(typeId: string): ModuleScript
@@ -591,6 +634,14 @@ function Registry.watchBehaviorTemplates()
 			return
 		end
 		local typeId = template.Name:gsub("Behavior$", "")
+		local canonical = Registry.canonicalizeBehaviorTemplate(typeId)
+		if not canonical then
+			return
+		end
+		template = canonical
+		if watched[template] then
+			return
+		end
 		watched[template] = true
 		table.insert(
 			connections,
