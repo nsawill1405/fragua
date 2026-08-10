@@ -3,6 +3,7 @@ local UiUtil = require(script.Parent.Parent.Shared.UiUtil)
 local PointerController = require(script.Parent.Parent.Shared.PointerController)
 local InteractionMath = require(script.Parent.Parent.Shared.InteractionMath)
 local ColorText = require(script.Parent.Parent.Shared.ColorText)
+local PreviewCommit = require(script.Parent.Parent.Shared.PreviewCommit)
 
 local Controls = {}
 
@@ -213,9 +214,11 @@ function Controls.numberField(parent: GuiObject, value: number, onCommit: (numbe
 	kc.Parent = knob
 
 	local working = value
+	local transaction = PreviewCommit.new(value)
 
 	local function paint(n: number)
 		working = math.clamp(n, minV :: number, maxV :: number)
+		PreviewCommit.preview(transaction, working)
 		local span = (maxV :: number) - (minV :: number)
 		local alpha = if span == 0 then 0 else math.clamp((working - (minV :: number)) / span, 0, 1)
 		fill.Size = UDim2.fromScale(alpha, 1)
@@ -227,7 +230,7 @@ function Controls.numberField(parent: GuiObject, value: number, onCommit: (numbe
 
 	local function commit(n: number)
 		paint(n)
-		onCommit(working)
+		onCommit(PreviewCommit.commit(transaction))
 	end
 
 	hit.MouseButton1Down:Connect(function(rawX, rawY)
@@ -242,7 +245,14 @@ function Controls.numberField(parent: GuiObject, value: number, onCommit: (numbe
 				local nextValue =
 					InteractionMath.valueFromLocal(localX, hit.AbsoluteSize.X, minV :: number, maxV :: number)
 				if nextValue ~= working then
-					commit(nextValue)
+					paint(nextValue)
+				end
+			end,
+			onFinish = function(_, _, cancelled)
+				if cancelled then
+					paint(PreviewCommit.cancel(transaction))
+				elseif working ~= value then
+					onCommit(PreviewCommit.commit(transaction))
 				end
 			end,
 		})
@@ -304,7 +314,7 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 	local function openPicker()
 		local host = UiUtil.dockHost(parent)
 		local original = swatch.BackgroundColor3
-		local committed = original
+		local transaction = PreviewCommit.new(original)
 
 		local overlay = Instance.new("Frame")
 		overlay.Name = "ColorPicker"
@@ -371,6 +381,7 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 
 		local h, s, v = original:ToHSV()
 		local working = original
+		local refreshGeneration = 0
 
 		local preview = Instance.new("Frame")
 		preview.Position = UDim2.fromOffset(12, 42)
@@ -501,17 +512,21 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 			hex.Text = " " .. ColorText.format(c.R, c.G, c.B)
 		end
 
-		local function refresh(live: boolean?)
+		local function refresh()
 			working = Color3.fromHSV(h, s, v)
-			preview.BackgroundColor3 = working
-			sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-			cursor.Position = UDim2.fromScale(s, 1 - v)
-			hueKnob.Position = UDim2.fromScale(0.5, h)
-			paintField(working)
-			if live ~= false then
-				committed = working
-				onCommit(working)
-			end
+			PreviewCommit.preview(transaction, working)
+			refreshGeneration += 1
+			local generation = refreshGeneration
+			task.defer(function()
+				if generation ~= refreshGeneration or not panel.Parent then
+					return
+				end
+				preview.BackgroundColor3 = working
+				sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+				cursor.Position = UDim2.fromScale(s, 1 - v)
+				hueKnob.Position = UDim2.fromScale(0.5, h)
+				paintField(working)
+			end)
 		end
 
 		-- Pick using overlay-local coordinates (AbsolutePosition deltas are PluginGui-safe).
@@ -521,14 +536,14 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 			local hh = math.max(sv.AbsoluteSize.Y, sv.Size.Y.Offset, 1)
 			s = math.clamp(localPos.X / w, 0, 1)
 			v = 1 - math.clamp(localPos.Y / hh, 0, 1)
-			refresh(true)
+			refresh()
 		end
 
 		local function pickHueAtHost(hostX: number, hostY: number)
 			local localPos = UiUtil.hostToLocal(overlay, hueBar, hostX, hostY)
 			local hh = math.max(hueBar.AbsoluteSize.Y, hueBar.Size.Y.Offset, 1)
 			h = math.clamp(localPos.Y / hh, 0, 1)
-			refresh(true)
+			refresh()
 		end
 
 		local function beginChannel(kind: string, rawX: number, rawY: number)
@@ -562,8 +577,7 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 		end
 
 		local function revertAndClose()
-			paintField(original)
-			onCommit(original)
+			paintField(PreviewCommit.cancel(transaction))
 			cleanup()
 		end
 
@@ -579,11 +593,11 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 		okBtn.BackgroundColor3 = Theme.accent
 		okBtn.ZIndex = 122
 		okBtn.MouseButton1Click:Connect(function()
-			onCommit(committed)
+			onCommit(PreviewCommit.commit(transaction))
 			cleanup()
 		end)
 
-		refresh(false)
+		refresh()
 	end
 
 	swatch.MouseButton1Click:Connect(openPicker)

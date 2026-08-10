@@ -18,9 +18,16 @@ type PointerSession = {
 local activeByHost: { [GuiObject]: PointerSession } = setmetatable({}, { __mode = "k" }) :: any
 
 function PointerController.toHostLocal(host: GuiObject, sampleX: number, sampleY: number): (number, number)
-	-- GuiButton mouse events and InputObject.Position both use screen coordinates.
-	-- Converting exactly once avoids the ambiguous "already local" heuristic that
-	-- made controls jump whenever a floating dock overlapped the screen origin.
+	local pluginGui = host:FindFirstAncestorWhichIsA("PluginGui")
+	if pluginGui then
+		local ok, relative = pcall(function()
+			return pluginGui:GetRelativeMousePosition()
+		end)
+		if ok then
+			return InteractionMath.toLocal(host.AbsolutePosition.X, host.AbsolutePosition.Y, relative.X, relative.Y)
+		end
+	end
+	-- GuiButton events outside PluginGui use screen coordinates.
 	return InteractionMath.toLocal(host.AbsolutePosition.X, host.AbsolutePosition.Y, sampleX, sampleY)
 end
 
