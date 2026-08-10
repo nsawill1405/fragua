@@ -41,4 +41,16 @@ return {
 		end)
 		assert(errors[1].code == "inheritance-cycle")
 	end,
+	["stable ids survive extends category and property changes"] = function()
+		local draft = TypeDraft.new("Child")
+		local categoryId = TypeDraft.addCategory(draft, "Data")
+		local propertyId = TypeDraft.addProperty(draft, categoryId, "Health", "number", "100")
+		TypeDraft.setExtends(draft, "Base")
+		TypeDraft.renameCategory(draft, categoryId, "Stats")
+		TypeDraft.updateProperty(draft, propertyId, { defaultText = "150" })
+		local snapshot = TypeDraft.snapshotEditableProperties(draft)
+		assert(draft.extends == "Base")
+		assert(snapshot[1].id == propertyId and snapshot[1].categoryName == "Stats")
+		assert(snapshot[1].defaultText == "150")
+	end,
 }

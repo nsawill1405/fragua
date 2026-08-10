@@ -31,6 +31,10 @@ function TypeDraft.renameCategory(draft, categoryId: string, name: string)
 	end
 end
 
+function TypeDraft.setExtends(draft, extends: string)
+	draft.extends = extends
+end
+
 function TypeDraft.removeCategory(draft, categoryId: string)
 	draft.categories[categoryId] = nil
 	local categoryIndex = table.find(draft.categoryOrder, categoryId)
@@ -76,6 +80,24 @@ function TypeDraft.updateProperty(draft, propertyId: string, changes)
 	for key, value in changes do
 		property[key] = value
 	end
+end
+
+function TypeDraft.snapshotEditableProperties(draft)
+	local snapshot = {}
+	for _, categoryId in draft.categoryOrder do
+		local category = draft.categories[categoryId]
+		if category then
+			for _, propertyId in draft.propertyOrder do
+				local property = draft.properties[propertyId]
+				if property and property.categoryId == categoryId then
+					local copy = table.clone(property)
+					copy.categoryName = category.name
+					table.insert(snapshot, copy)
+				end
+			end
+		end
+	end
+	return snapshot
 end
 
 local function validDefault(valueType: string, text: string): boolean

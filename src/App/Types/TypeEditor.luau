@@ -6,6 +6,7 @@ local IconCatalog = require(script.Parent.IconCatalog)
 local IconPicker = require(script.Parent.IconPicker)
 local Registry = require(script.Parent.Registry)
 local TypeDraft = require(script.Parent.TypeDraft)
+local TypeEditorLayout = require(script.Parent.TypeEditorLayout)
 
 local TypeEditor = {}
 
@@ -95,7 +96,7 @@ local function defaultTextFor(value: any, valueType: string): string
 	return tostring(value)
 end
 
-function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: string?)
+function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string?))?, editId: string?)
 	local editing = editId and Registry.get(editId) or nil
 
 	local overlay = Instance.new("Frame")
@@ -108,20 +109,25 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 	Theme.tween(overlay, { BackgroundTransparency = 0.35 }, Theme.tweenMed)
 
 	local hostGui = host :: GuiObject
-	local hostSize = hostGui.AbsoluteSize
-	-- Fit inside the dock; never grow taller or wider than the host.
-	local panelW = math.clamp(math.floor(hostSize.X - 16), 260, 400)
-	local panelH = math.clamp(math.floor(hostSize.Y - 16), 280, 480)
-
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.fromOffset(panelW, panelH)
+	panel.Size = UDim2.fromOffset(1, 1)
 	panel.BackgroundColor3 = Theme.bg
 	panel.BorderSizePixel = 0
 	panel.ClipsDescendants = true
 	panel.ZIndex = 61
 	panel.Parent = overlay
+
+	local function resizePanel()
+		local size = TypeEditorLayout.panelSize(hostGui.AbsoluteSize.X, hostGui.AbsoluteSize.Y)
+		panel.Size = UDim2.fromOffset(size.width, size.height)
+	end
+	resizePanel()
+	local resizeConnection = hostGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(resizePanel)
+	overlay.Destroying:Once(function()
+		resizeConnection:Disconnect()
+	end)
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 10)
@@ -205,6 +211,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 	extendsLabel.Parent = panel
 
 	local selectedExtends = NONE_LABEL
+	local rebuildProps: (() -> ())? = nil
 	local extendsBtn = Instance.new("TextButton")
 	extendsBtn.AutoButtonColor = false
 	extendsBtn.BackgroundColor3 = Theme.inputBg
@@ -238,6 +245,9 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 		selectedExtends = item
 		extendsText.Text = item .. "  v"
 		extendsIcon:SetAttribute("IconId", iconForExtends(item))
+		if rebuildProps then
+			rebuildProps()
+		end
 	end
 
 	local dropOpen = false
@@ -456,8 +466,6 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 		}
 	end
 
-	local rebuildProps: () -> ()
-
 	rebuildProps = function()
 		for _, child in propsScroll:GetChildren() do
 			if child:IsA("Frame") or child:IsA("TextButton") then
@@ -475,9 +483,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 			section.BackgroundColor3 = Theme.bgRaised
 			section.BackgroundTransparency = 0.35
 			section.BorderSizePixel = 0
-			-- Compact fixed height; AutomaticSize plus Scale-Y was blowing this up.
-			local rowH = 28
-			section.Size = UDim2.new(1, 0, 0, 36 + #props * rowH)
+			section.Size = UDim2.new(1, 0, 0, 40)
 			section.AutomaticSize = Enum.AutomaticSize.None
 			section.ClipsDescendants = true
 			section.LayoutOrder = order
@@ -489,7 +495,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 			local accent = Instance.new("Frame")
 			accent.BackgroundColor3 = UiUtil.sectionColor(catName)
 			accent.BorderSizePixel = 0
-			accent.Size = UDim2.fromOffset(3, math.max(18, 22 + #props * rowH))
+			accent.Size = UDim2.fromOffset(3, 34)
 			accent.Position = UDim2.fromOffset(0, 3)
 			accent.ZIndex = 64
 			accent.Parent = section
@@ -504,6 +510,14 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 			sectionPad.PaddingLeft = UDim.new(0, 10)
 			sectionPad.PaddingRight = UDim.new(0, 6)
 			sectionPad.Parent = section
+
+			local function resizeSection()
+				local height = math.max(40, sectionList.AbsoluteContentSize.Y + 8)
+				section.Size = UDim2.new(1, 0, 0, height)
+				accent.Size = UDim2.fromOffset(3, math.max(18, height - 6))
+			end
+			sectionList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resizeSection)
+			task.defer(resizeSection)
 
 			local header = Instance.new("Frame")
 			header.BackgroundTransparency = 1
@@ -731,9 +745,12 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 				del.TextColor3 = Theme.textMuted
 				del.ZIndex = 65
 				del.Parent = row
-				local propIndex = pi
 				del.MouseButton1Click:Connect(function()
-					table.remove(propsByCat[capturedCat], propIndex)
+					local currentList = propsByCat[capturedCat]
+					local propIndex = currentList and table.find(currentList, prop)
+					if currentList and propIndex then
+						table.remove(currentList, propIndex)
+					end
 					rebuildProps()
 				end)
 				del.MouseEnter:Connect(function()
@@ -744,6 +761,121 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 				end)
 			end
 
+			order += 1
+		end
+
+		local directProperties = {}
+		for _, catName in categoryOrder do
+			for _, property in propsByCat[catName] or {} do
+				table.insert(directProperties, {
+					name = property.name,
+					valueType = property.valueType,
+					default = property.defaultText,
+					category = catName,
+				})
+			end
+		end
+		local draftDefinition = {
+			id = if editing then editing.id else "__FraguaDraft",
+			name = if editing then editing.name else "Draft",
+			description = "",
+			extends = storeExtends(selectedExtends),
+			icon = selectedIcon,
+			properties = directProperties,
+		}
+		local inheritedByOrigin = {}
+		local inheritedOrder = {}
+		for _, property in Registry.resolvedSchema(draftDefinition) do
+			if property.inherited then
+				local origin = property.origin or draftDefinition.extends
+				if not inheritedByOrigin[origin] then
+					inheritedByOrigin[origin] = {}
+					table.insert(inheritedOrder, origin)
+				end
+				table.insert(inheritedByOrigin[origin], property)
+			end
+		end
+
+		for _, origin in inheritedOrder do
+			local inherited = inheritedByOrigin[origin]
+			local section = Instance.new("Frame")
+			section.BackgroundColor3 = Theme.bgRaised
+			section.BackgroundTransparency = 0.65
+			section.BorderSizePixel = 0
+			section.Size = UDim2.new(1, 0, 0, 38 + #inherited * 26)
+			section.LayoutOrder = order
+			section.ZIndex = 63
+			section.Parent = propsScroll
+			local inheritedCorner = Instance.new("UICorner")
+			inheritedCorner.CornerRadius = Theme.radius.control
+			inheritedCorner.Parent = section
+			local list = Instance.new("UIListLayout")
+			list.Padding = UDim.new(0, 2)
+			list.SortOrder = Enum.SortOrder.LayoutOrder
+			list.Parent = section
+			local padding = Instance.new("UIPadding")
+			padding.PaddingTop = UDim.new(0, 6)
+			padding.PaddingBottom = UDim.new(0, 6)
+			padding.PaddingLeft = UDim.new(0, 10)
+			padding.PaddingRight = UDim.new(0, 8)
+			padding.Parent = section
+
+			local header = Instance.new("TextLabel")
+			header.BackgroundTransparency = 1
+			header.Size = UDim2.new(1, 0, 0, 22)
+			header.Font = Theme.fontBold
+			header.TextSize = 11
+			header.TextXAlignment = Enum.TextXAlignment.Left
+			header.TextColor3 = Theme.textMuted
+			header.Text = `INHERITED FROM {string.upper(origin)}`
+			header.LayoutOrder = 0
+			header.ZIndex = 64
+			header.Parent = section
+
+			for index, property in inherited do
+				local row = Instance.new("Frame")
+				row.BackgroundColor3 = Theme.bgDeep
+				row.BackgroundTransparency = 0.45
+				row.BorderSizePixel = 0
+				row.Size = UDim2.new(1, 0, 0, 24)
+				row.LayoutOrder = index
+				row.ZIndex = 64
+				row.Parent = section
+				local rowCorner = Instance.new("UICorner")
+				rowCorner.CornerRadius = UDim.new(0, 4)
+				rowCorner.Parent = row
+
+				local name = Instance.new("TextLabel")
+				name.BackgroundTransparency = 1
+				name.Position = UDim2.fromOffset(8, 0)
+				name.Size = UDim2.new(0.46, -8, 1, 0)
+				name.Font = Theme.font
+				name.TextSize = 11
+				name.TextXAlignment = Enum.TextXAlignment.Left
+				name.TextColor3 = Theme.text
+				name.Text = property.name
+				name.ZIndex = 65
+				name.Parent = row
+
+				local meta = Instance.new("TextLabel")
+				meta.BackgroundTransparency = 1
+				meta.Position = UDim2.fromScale(0.46, 0)
+				meta.Size = UDim2.new(0.54, -8, 1, 0)
+				meta.Font = Theme.fontMono
+				meta.TextSize = 10
+				meta.TextXAlignment = Enum.TextXAlignment.Right
+				meta.TextColor3 = Theme.textMuted
+				meta.TextTruncate = Enum.TextTruncate.AtEnd
+				meta.Text = `{property.valueType or "value"}  {defaultTextFor(property.default, property.valueType)}`
+				meta.ZIndex = 65
+				meta.Parent = row
+			end
+
+			local function resizeInherited()
+				section.Size = UDim2.new(1, 0, 0, math.max(38, list.AbsoluteContentSize.Y + 12))
+			end
+			list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resizeInherited)
+			task.defer(resizeInherited)
 			order += 1
 		end
 	end
@@ -787,7 +919,11 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 		overlay:Destroy()
 	end)
 
-	local save = Theme.makeButton(panel, if editing then "Save" else "Create", { Size = UDim2.fromOffset(80, 28) })
+	local save = Theme.makeButton(
+		panel,
+		if editing then "Save changes" else "Create & insert",
+		{ Size = UDim2.fromOffset(if editing then 108 else 116, 28) }
+	)
 	save.AnchorPoint = Vector2.new(1, 1)
 	save.Position = UDim2.new(1, -12, 1, -14)
 	save.BackgroundColor3 = Theme.accent
@@ -874,7 +1010,11 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> ())?, editId: str
 			Registry.migrateInstances(name, previous, def)
 		end
 		if onSaved then
-			onSaved(name)
+			local accepted, message = onSaved(name)
+			if accepted == false then
+				errorLabel.Text = message or "Type saved, but the next action failed."
+				return
+			end
 		end
 		overlay:Destroy()
 	end)
