@@ -8,6 +8,7 @@ local IconCatalog = require(script.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Types.Registry)
 local EngineProps = require(script.EngineProps)
 local Controls = require(script.Controls)
+local PropertyRefreshPolicy = require(script.PropertyRefreshPolicy)
 
 local Properties = {}
 
@@ -105,6 +106,10 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 	local conns: { RBXScriptConnection } = {}
 	local rebuilding = false
 	local collapsedSections: { [string]: boolean } = {}
+	local propertyUpdaters: { [string]: (any) -> () } = {}
+	local attributeUpdaters: { [string]: (any) -> () } = {}
+	local previewingProperties: { [string]: boolean } = {}
+	local previewingAttributes: { [string]: boolean } = {}
 
 	local function clearConns()
 		for _, c in conns do
@@ -206,8 +211,18 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			enumItems: { string }?,
 			enumType: string?,
 			onCommit: (any) -> (),
+			onPreview: ((any) -> ())?,
+			changeKind: string?,
 		}
 	)
+		local function registerUpdater(update: (any) -> ())
+			if prop.changeKind == "property" then
+				propertyUpdaters[prop.name] = update
+			elseif prop.changeKind == "attribute" then
+				attributeUpdaters[prop.name] = update
+			end
+		end
+
 		local row = Instance.new("Frame")
 		row.BackgroundColor3 = Theme.bg
 		row.BorderSizePixel = 0
@@ -294,6 +309,11 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					prop.onCommit(displayValue)
 				end)
 			end)
+			registerUpdater(function(nextValue)
+				displayValue = nextValue == true
+				toggle.BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg
+				knob.Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2)
+			end)
 			return
 		end
 
@@ -309,24 +329,30 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				prop.onCommit(picked)
 			end, enumType)
 			drop.Size = UDim2.fromScale(1, 1)
+			registerUpdater(function(nextValue)
+				local name = if typeof(nextValue) == "EnumItem" then nextValue.Name else tostring(nextValue)
+				drop.Text = "  " .. name
+			end)
 			return
 		end
 
 		if valueType == "Color3" and typeof(value) == "Color3" and not readonly then
-			local field = Controls.colorField(valueParent, value, function(c)
+			local field, update = Controls.colorField(valueParent, value, function(c)
 				ChangeHistoryService:SetWaypoint("Fragua Property")
 				prop.onCommit(c)
-			end)
+			end, prop.onPreview)
 			field.Size = UDim2.fromScale(1, 1)
+			registerUpdater(update)
 			return
 		end
 
 		if valueType == "number" and typeof(value) == "number" and not readonly then
-			local field = Controls.numberField(valueParent, value, function(n)
+			local field, update = Controls.numberField(valueParent, value, function(n)
 				ChangeHistoryService:SetWaypoint("Fragua Property")
 				prop.onCommit(n)
-			end, NUMBER_RANGES[prop.name])
+			end, NUMBER_RANGES[prop.name], prop.onPreview)
 			field.Size = UDim2.fromScale(1, 1)
+			registerUpdater(update)
 			return
 		end
 
@@ -358,6 +384,11 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				end
 			end)
 		end
+		registerUpdater(function(nextValue)
+			if not box:IsFocused() then
+				box.Text = " " .. Util.formatValue(nextValue)
+			end
+		end)
 	end
 
 	local function rebuild()
@@ -368,6 +399,8 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		local ok, err = pcall(function()
 			clearConns()
 			clearRows()
+			table.clear(propertyUpdaters)
+			table.clear(attributeUpdaters)
 			local list = Selection:Get()
 			current = list[1]
 			if not current then
@@ -401,6 +434,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					onCommit = function(v)
 						current.Name = tostring(v)
 					end,
+					changeKind = "property",
 				})
 				local typeIds = {}
 				for _, d in Registry.list() do
@@ -436,6 +470,12 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 								onCommit = function(v)
 									current:SetAttribute(captured, v)
 								end,
+								onPreview = function(v)
+									previewingAttributes[captured] = true
+									current:SetAttribute(captured, v)
+									previewingAttributes[captured] = nil
+								end,
+								changeKind = "attribute",
 							})
 						end
 					end
@@ -537,6 +577,12 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 						onCommit = function(v)
 							EngineProps.set(current, capturedName, v)
 						end,
+						onPreview = function(v)
+							previewingProperties[capturedName] = true
+							EngineProps.set(current, capturedName, v)
+							previewingProperties[capturedName] = nil
+						end,
+						changeKind = "property",
 					})
 				end
 
@@ -558,6 +604,12 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 						onCommit = function(v)
 							current:SetAttribute(captured, v)
 						end,
+						onPreview = function(v)
+							previewingAttributes[captured] = true
+							current:SetAttribute(captured, v)
+							previewingAttributes[captured] = nil
+						end,
+						changeKind = "attribute",
 					})
 				end
 			end
@@ -578,16 +630,57 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				end
 			end
 
+			local selected = current
+			local function updateTitle()
+				if Registry.isFraguaInstance(selected) then
+					local typeId = Registry.getTypeId(selected)
+					local def = typeId and Registry.get(typeId)
+					title.Text = selected.Name .. "  /  " .. (if def then def.name else (typeId or "Unknown"))
+				else
+					title.Text = selected.Name .. "  /  " .. selected.ClassName
+				end
+			end
 			table.insert(
 				conns,
-				current.Changed:Connect(function()
-					task.defer(rebuild)
+				selected.Changed:Connect(function(propertyName)
+					if current ~= selected or PropertyRefreshPolicy.action("property", propertyName) ~= "update" then
+						return
+					end
+					if previewingProperties[propertyName] then
+						return
+					end
+					local update = propertyUpdaters[propertyName]
+					if update then
+						local gotValue, nextValue = pcall(EngineProps.get, selected, propertyName)
+						if gotValue then
+							update(nextValue)
+						end
+					end
+					if propertyName == "Name" then
+						updateTitle()
+					end
 				end)
 			)
 			table.insert(
 				conns,
-				current.AttributeChanged:Connect(function()
-					task.defer(rebuild)
+				selected.AttributeChanged:Connect(function(attributeName)
+					if current ~= selected then
+						return
+					end
+					if PropertyRefreshPolicy.action("attribute", attributeName) == "rebuild" then
+						task.defer(rebuild)
+						return
+					end
+					if previewingAttributes[attributeName] then
+						return
+					end
+					local nextValue = selected:GetAttribute(attributeName)
+					local update = attributeUpdaters[attributeName]
+					if update and nextValue ~= nil then
+						update(nextValue)
+					else
+						task.defer(rebuild)
+					end
 				end)
 			)
 		end)

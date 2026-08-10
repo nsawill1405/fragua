@@ -11,6 +11,7 @@ TestRunner.run({
 	EditorLayout = require("./EditorLayout.spec"),
 	SyntaxHighlighter = require("./SyntaxHighlighter.spec"),
 	PreviewCommit = require("./PreviewCommit.spec"),
+	PropertyRefreshPolicy = require("./PropertyRefreshPolicy.spec"),
 	SchemaResolver = require("./SchemaResolver.spec"),
 	TypeEditorLayout = require("./TypeEditorLayout.spec"),
 	InsertFlow = require("./InsertFlow.spec"),

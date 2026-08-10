@@ -1,4 +1,4 @@
-local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local Theme = require(script.Parent.Parent.Shared.Theme)
 local CompletionEngine = require(script.Parent.CompletionEngine)
@@ -46,7 +46,8 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	gutter.BorderSizePixel = 0
 	gutter.Size = UDim2.new(0, 44, 1, 0)
 	gutter.Font = Theme.fontMono
-	gutter.TextSize = 12
+	gutter.TextSize = 13
+	gutter.LineHeight = 1.35
 	gutter.TextColor3 = Theme.textMuted
 	gutter.TextXAlignment = Enum.TextXAlignment.Right
 	gutter.TextYAlignment = Enum.TextYAlignment.Top
@@ -80,7 +81,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	highlight.TextWrapped = false
 	highlight.RichText = true
 	highlight.Text = ""
-	highlight.ZIndex = 1
+	highlight.ZIndex = 2
 	highlight.Parent = content
 	local highlightPadding = Instance.new("UIPadding")
 	highlightPadding.PaddingTop = UDim.new(0, 10)
@@ -106,7 +107,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	editor.Position = UDim2.fromOffset(45, 0)
 	editor.Size = UDim2.new(1, -45, 1, 0)
 	editor.Text = ""
-	editor.ZIndex = 2
+	editor.ZIndex = 3
 	editor.Parent = content
 	local editorPadding = Instance.new("UIPadding")
 	editorPadding.PaddingTop = UDim.new(0, 10)
@@ -114,6 +115,23 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	editorPadding.PaddingLeft = UDim.new(0, 12)
 	editorPadding.PaddingRight = UDim.new(0, 12)
 	editorPadding.Parent = editor
+
+	local selectionLayer = Instance.new("Frame")
+	selectionLayer.Name = "SelectionLayer"
+	selectionLayer.BackgroundTransparency = 1
+	selectionLayer.BorderSizePixel = 0
+	selectionLayer.Size = UDim2.fromScale(1, 1)
+	selectionLayer.ZIndex = 1
+	selectionLayer.Parent = content
+
+	local caret = Instance.new("Frame")
+	caret.Name = "Caret"
+	caret.BackgroundColor3 = Theme.textBright
+	caret.BorderSizePixel = 0
+	caret.Size = UDim2.fromOffset(2, 18)
+	caret.Visible = false
+	caret.ZIndex = 4
+	caret.Parent = content
 
 	local popup = Instance.new("Frame")
 	popup.Name = "CompletionPopup"
@@ -137,6 +155,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	local suggestions = {}
 	local selectedIndex = 1
 	local suppressChange = false
+	local suppressAssistance = false
 	local highlightGeneration = 0
 	local metrics = {
 		charWidth = 7.8,
@@ -155,6 +174,43 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		divider.Size = UDim2.fromOffset(1, size.height)
 		editor.Size = UDim2.fromOffset(math.max(1, size.width - 45), size.height)
 		highlight.Size = editor.Size
+		selectionLayer.Size = content.Size
+	end
+
+	local function renderCursorAndSelection(keepVisible: boolean?)
+		for _, child in selectionLayer:GetChildren() do
+			if child:IsA("GuiObject") then
+				child:Destroy()
+			end
+		end
+		for _, rect in EditorLayout.selectionRects(editor.Text, editor.CursorPosition, editor.SelectionStart, metrics) do
+			local selected = Instance.new("Frame")
+			selected.Name = "SelectedText"
+			selected.BackgroundColor3 = Theme.bgSelected
+			selected.BackgroundTransparency = 0.38
+			selected.BorderSizePixel = 0
+			selected.Position = UDim2.fromOffset(rect.x, rect.y)
+			selected.Size = UDim2.fromOffset(math.max(2, rect.width), rect.height)
+			selected.ZIndex = 1
+			selected.Parent = selectionLayer
+		end
+		caret.Visible = editor:IsFocused() and editor.CursorPosition > 0
+		if editor.CursorPosition > 0 then
+			local point = EditorLayout.cursorPoint(editor.Text, editor.CursorPosition, metrics)
+			caret.Position = UDim2.fromOffset(point.x, point.y)
+			caret.Size = UDim2.fromOffset(2, metrics.lineHeight)
+			if keepVisible then
+				local target = EditorLayout.scrollToPoint(
+					point,
+					viewport.CanvasPosition.X,
+					viewport.CanvasPosition.Y,
+					viewport.AbsoluteSize.X,
+					viewport.AbsoluteSize.Y,
+					metrics.lineHeight
+				)
+				viewport.CanvasPosition = Vector2.new(target.x, target.y)
+			end
+		end
 	end
 
 	local function fallbackRichText(source: string): string
@@ -185,6 +241,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		end
 		gutter.Text = table.concat(lines, "\n")
 		updateCanvas()
+		renderCursorAndSelection()
 	end
 
 	local function clearPopupRows()
@@ -210,9 +267,9 @@ function CodeCanvas.mount(parent: GuiObject, options)
 			windowStart = selectedIndex
 		end
 		popup.Size = UDim2.fromOffset(math.min(300, math.max(200, root.AbsoluteSize.X - 16)), visibleCount * 34)
-		local caret = EditorLayout.caretPoint(editor.Text, math.max(editor.CursorPosition, 1), metrics)
+		local caretPoint = EditorLayout.caretPoint(editor.Text, math.max(editor.CursorPosition, 1), metrics)
 		local popupPoint = EditorLayout.popupPoint(
-			caret,
+			caretPoint,
 			viewport.CanvasPosition.X,
 			viewport.CanvasPosition.Y,
 			viewport.AbsoluteSize.X,
@@ -270,12 +327,16 @@ function CodeCanvas.mount(parent: GuiObject, options)
 			return
 		end
 		local source, cursor = replaceRange(editor.Text, item.startByte, item.endByte, item.newText)
+		cursor += item.caretOffset or 0
 		suppressChange = true
+		suppressAssistance = true
 		editor.Text = source
 		editor.CursorPosition = cursor
 		editor.SelectionStart = -1
+		suppressAssistance = false
 		suppressChange = false
 		popup.Visible = false
+		renderCursorAndSelection(true)
 		if options.onChanged then
 			options.onChanged(source, cursor, -1)
 		end
@@ -287,13 +348,25 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		if not suppressChange and options.onChanged then
 			options.onChanged(editor.Text, editor.CursorPosition, editor.SelectionStart)
 		end
-		task.defer(refreshAssistance)
+		if not suppressAssistance then
+			task.defer(refreshAssistance)
+		end
 	end)
 	editor:GetPropertyChangedSignal("CursorPosition"):Connect(function()
-		task.defer(refreshAssistance)
+		renderCursorAndSelection(true)
+		if not suppressAssistance then
+			task.defer(refreshAssistance)
+		end
+	end)
+	editor:GetPropertyChangedSignal("SelectionStart"):Connect(function()
+		renderCursorAndSelection()
+	end)
+	editor.Focused:Connect(function()
+		renderCursorAndSelection(true)
 	end)
 	editor.FocusLost:Connect(function()
 		popup.Visible = false
+		renderCursorAndSelection()
 	end)
 	viewport:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
 		if popup.Visible then
@@ -302,24 +375,51 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	end)
 	root:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCanvas)
 
-	local inputConnection = UserInputService.InputBegan:Connect(function(input)
-		if not editor:IsFocused() then
-			return
+	local completionAction = `FraguaCompletion-{tostring(editor)}`
+	local function handleCompletionAction(_, inputState, input)
+		if inputState ~= Enum.UserInputState.Begin or not editor:IsFocused() then
+			return Enum.ContextActionResult.Pass
 		end
 		if popup.Visible then
 			if input.KeyCode == Enum.KeyCode.Down then
 				selectedIndex = math.min(selectedIndex + 1, #suggestions)
 				renderPopup()
+				return Enum.ContextActionResult.Sink
 			elseif input.KeyCode == Enum.KeyCode.Up then
 				selectedIndex = math.max(selectedIndex - 1, 1)
 				renderPopup()
+				return Enum.ContextActionResult.Sink
 			elseif input.KeyCode == Enum.KeyCode.Tab or input.KeyCode == Enum.KeyCode.Return then
 				acceptSelected()
+				return Enum.ContextActionResult.Sink
 			elseif input.KeyCode == Enum.KeyCode.Escape then
 				popup.Visible = false
+				return Enum.ContextActionResult.Sink
 			end
+		elseif input.KeyCode == Enum.KeyCode.Tab then
+			local source, cursor = replaceRange(editor.Text, editor.CursorPosition, editor.CursorPosition, "\t")
+			suppressChange = true
+			editor.Text = source
+			editor.CursorPosition = cursor
+			suppressChange = false
+			if options.onChanged then
+				options.onChanged(source, cursor, editor.SelectionStart)
+			end
+			return Enum.ContextActionResult.Sink
 		end
-	end)
+		return Enum.ContextActionResult.Pass
+	end
+	ContextActionService:BindActionAtPriority(
+		completionAction,
+		handleCompletionAction,
+		false,
+		3000,
+		Enum.KeyCode.Down,
+		Enum.KeyCode.Up,
+		Enum.KeyCode.Tab,
+		Enum.KeyCode.Return,
+		Enum.KeyCode.Escape
+	)
 
 	return {
 		root = root,
@@ -345,7 +445,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 			return editor.Text
 		end,
 		destroy = function()
-			inputConnection:Disconnect()
+			ContextActionService:UnbindAction(completionAction)
 			root:Destroy()
 		end,
 	}
