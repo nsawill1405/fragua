@@ -36,6 +36,41 @@ local BASE_PART_PROPS = {
 	{ name = "Orientation", category = "Transform", valueType = "Vector3" },
 }
 
+local GUI_OBJECT_PROPS = {
+	{ name = "Visible", category = "Data", valueType = "boolean" },
+	{ name = "Active", category = "Behavior", valueType = "boolean" },
+	{ name = "Interactable", category = "Behavior", valueType = "boolean" },
+	{ name = "BackgroundColor3", category = "Appearance", valueType = "Color3" },
+	{ name = "BackgroundTransparency", category = "Appearance", valueType = "number" },
+	{ name = "BorderColor3", category = "Appearance", valueType = "Color3" },
+	{ name = "BorderSizePixel", category = "Appearance", valueType = "number" },
+	{ name = "LayoutOrder", category = "Layout", valueType = "number" },
+	{ name = "ZIndex", category = "Layout", valueType = "number" },
+}
+
+local LIGHT_PROPS = {
+	{ name = "Enabled", category = "Data", valueType = "boolean" },
+	{ name = "Brightness", category = "Appearance", valueType = "number" },
+	{ name = "Color", category = "Appearance", valueType = "Color3" },
+	{ name = "Shadows", category = "Appearance", valueType = "boolean" },
+}
+
+local POST_EFFECT_PROPS = {
+	{ name = "Enabled", category = "Data", valueType = "boolean" },
+}
+
+local BASE_SCRIPT_PROPS = {
+	{ name = "Disabled", category = "Data", valueType = "boolean" },
+}
+
+local INHERITED_FAMILIES = {
+	{ className = "BasePart", properties = BASE_PART_PROPS },
+	{ className = "GuiObject", properties = GUI_OBJECT_PROPS },
+	{ className = "Light", properties = LIGHT_PROPS },
+	{ className = "PostEffect", properties = POST_EFFECT_PROPS },
+	{ className = "BaseScript", properties = BASE_SCRIPT_PROPS },
+}
+
 local BY_CLASS: { [string]: { EngineProp } } = {
 	Instance = {
 		{ name = "Name", category = "Data", valueType = "string" },
@@ -392,9 +427,11 @@ local REFLECT_PROPS: { EngineProp } = {
 	{ name = "Name", category = "Data", valueType = "string" },
 	{ name = "Enabled", category = "Data", valueType = "boolean" },
 	{ name = "Visible", category = "Data", valueType = "boolean" },
+	{ name = "Active", category = "Behavior", valueType = "boolean" },
+	{ name = "Interactable", category = "Behavior", valueType = "boolean" },
+	{ name = "Disabled", category = "Data", valueType = "boolean" },
 	{ name = "Archivable", category = "Data", valueType = "boolean" },
 	{ name = "Intensity", category = "Appearance", valueType = "number" },
-	{ name = "Size", category = "Appearance", valueType = "number" },
 	{ name = "Threshold", category = "Appearance", valueType = "number" },
 	{ name = "Brightness", category = "Appearance", valueType = "number" },
 	{ name = "Contrast", category = "Appearance", valueType = "number" },
@@ -402,7 +439,12 @@ local REFLECT_PROPS: { EngineProp } = {
 	{ name = "TintColor", category = "Appearance", valueType = "Color3" },
 	{ name = "Color", category = "Appearance", valueType = "Color3" },
 	{ name = "Color3", category = "Appearance", valueType = "Color3" },
+	{ name = "BackgroundColor3", category = "Appearance", valueType = "Color3" },
+	{ name = "BackgroundTransparency", category = "Appearance", valueType = "number" },
+	{ name = "BorderColor3", category = "Appearance", valueType = "Color3" },
+	{ name = "BorderSizePixel", category = "Appearance", valueType = "number" },
 	{ name = "Transparency", category = "Appearance", valueType = "number" },
+	{ name = "Shadows", category = "Appearance", valueType = "boolean" },
 	{ name = "Range", category = "Appearance", valueType = "number" },
 	{ name = "Angle", category = "Appearance", valueType = "number" },
 	{ name = "Spread", category = "Appearance", valueType = "number" },
@@ -410,8 +452,8 @@ local REFLECT_PROPS: { EngineProp } = {
 	{ name = "Texture", category = "Appearance", valueType = "string" },
 	{ name = "SoundId", category = "Audio", valueType = "string" },
 	{ name = "Volume", category = "Audio", valueType = "number" },
-	{ name = "Position", category = "Transform", valueType = "Vector3" },
-	{ name = "Orientation", category = "Transform", valueType = "Vector3" },
+	{ name = "LayoutOrder", category = "Layout", valueType = "number" },
+	{ name = "ZIndex", category = "Layout", valueType = "number" },
 }
 
 -- Generic service fallback (read-only identity)
@@ -439,26 +481,13 @@ local SERVICE_NAMES = {
 
 function EngineProps.forInstance(instance: Instance): { EngineProp }
 	local exact = BY_CLASS[instance.ClassName]
-	local isBasePart = instance:IsA("BasePart")
 	local list
-	if exact or isBasePart then
-		list = EnginePropResolver.resolve(
-			instance.ClassName,
-			function(className)
-				return instance:IsA(className)
-			end,
-			BY_CLASS,
-			{
-				{ className = "BasePart", properties = BASE_PART_PROPS },
-			}
-		)
+	if not exact and (SERVICE_NAMES[instance.ClassName] or instance.Parent == game) then
+		list = SERVICE_FALLBACK
 	else
-		if SERVICE_NAMES[instance.ClassName] or instance.Parent == game then
-			list = SERVICE_FALLBACK
-		else
-			-- reflect common props so classes like Bloom aren't empty
-			list = REFLECT_PROPS
-		end
+		list = EnginePropResolver.resolve(instance.ClassName, function(className)
+			return instance:IsA(className)
+		end, BY_CLASS, INHERITED_FAMILIES, REFLECT_PROPS)
 	end
 
 	local out = {}
