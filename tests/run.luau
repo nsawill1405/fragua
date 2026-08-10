@@ -13,6 +13,7 @@ TestRunner.run({
 	IconData = require("./IconData.spec"),
 	EnginePropResolver = require("./EnginePropResolver.spec"),
 	LifecycleGate = require("./LifecycleGate.spec"),
+	MetadataModel = require("./MetadataModel.spec"),
 	ScriptHeader = require("./ScriptHeader.spec"),
 	TypeCatalog = require("./TypeCatalog.spec"),
 	ApiSource = require("./ApiSource.spec"),
