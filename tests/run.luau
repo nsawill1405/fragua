@@ -9,4 +9,5 @@ TestRunner.run({
 	Diagnostics = require("./Diagnostics.spec"),
 	ColorText = require("./ColorText.spec"),
 	EditorLayout = require("./EditorLayout.spec"),
+	SyntaxHighlighter = require("./SyntaxHighlighter.spec"),
 })
