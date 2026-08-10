@@ -118,10 +118,28 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 	panel.ClipsDescendants = true
 	panel.ZIndex = 61
 	panel.Parent = overlay
+	local body: ScrollingFrame? = nil
+	local footer: Frame? = nil
+	local cancelButton: TextButton? = nil
+	local saveButton: TextButton? = nil
 
 	local function resizePanel()
-		local size = TypeEditorLayout.panelSize(hostGui.AbsoluteSize.X, hostGui.AbsoluteSize.Y)
-		panel.Size = UDim2.fromOffset(size.width, size.height)
+		local geometry = TypeEditorLayout.geometry(hostGui.AbsoluteSize.X, hostGui.AbsoluteSize.Y)
+		panel.Size = UDim2.fromOffset(geometry.panel.width, geometry.panel.height)
+		if body then
+			body.Position = UDim2.fromOffset(geometry.body.x, geometry.body.y)
+			body.Size = UDim2.fromOffset(geometry.body.width, geometry.body.height)
+		end
+		if footer then
+			footer.Position = UDim2.fromOffset(geometry.footer.x, geometry.footer.y)
+			footer.Size = UDim2.fromOffset(geometry.footer.width, geometry.footer.height)
+		end
+		if cancelButton and saveButton then
+			saveButton.Size = UDim2.fromOffset(geometry.saveWidth, 28)
+			saveButton.Position = UDim2.new(1, -12, 1, -4)
+			cancelButton.Size = UDim2.fromOffset(geometry.cancelWidth, 28)
+			cancelButton.Position = UDim2.new(1, -12 - geometry.saveWidth - geometry.buttonGap, 1, -4)
+		end
 	end
 	resizePanel()
 	local resizeConnection = hostGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(resizePanel)
@@ -397,24 +415,11 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 	end)
 
 	-- properties manager
-	local propsHeader = Instance.new("TextLabel")
-	propsHeader.BackgroundTransparency = 1
-	propsHeader.Position = UDim2.fromOffset(12, 146)
-	propsHeader.Size = UDim2.new(1, -24, 0, 16)
-	propsHeader.Font = Theme.fontBold
-	propsHeader.TextSize = 12
-	propsHeader.TextXAlignment = Enum.TextXAlignment.Left
-	propsHeader.TextColor3 = Theme.textMuted
-	propsHeader.Text = "PROPERTIES & SEGMENTS"
-	propsHeader.ZIndex = 62
-	propsHeader.Parent = panel
-
 	local propsScroll = Instance.new("ScrollingFrame")
+	body = propsScroll
+	propsScroll.Name = "TypeEditorBody"
 	propsScroll.BackgroundColor3 = Theme.bgDeep
 	propsScroll.BorderSizePixel = 0
-	propsScroll.Position = UDim2.fromOffset(12, 166)
-	-- leave room for +segment / error / cancel / save at bottom
-	propsScroll.Size = UDim2.new(1, -24, 1, -214)
 	propsScroll.ScrollBarThickness = 5
 	propsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	propsScroll.CanvasSize = UDim2.new()
@@ -433,6 +438,57 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 	propsPad.PaddingLeft = UDim.new(0, 8)
 	propsPad.PaddingRight = UDim.new(0, 8)
 	propsPad.Parent = propsScroll
+
+	local topFields = Instance.new("Frame")
+	topFields.Name = "TopFields"
+	topFields.BackgroundTransparency = 1
+	topFields.Size = UDim2.new(1, 0, 0, 104)
+	topFields.LayoutOrder = 0
+	topFields.ZIndex = 62
+	topFields.Parent = propsScroll
+
+	nameLabel.Parent = topFields
+	nameLabel.Position = UDim2.fromOffset(0, 0)
+	nameBox.Parent = topFields
+	nameBox.Position = UDim2.fromOffset(0, 16)
+	nameBox.Size = UDim2.new(0.5, -6, 0, 28)
+	extendsLabel.Parent = topFields
+	extendsLabel.Position = UDim2.new(0.5, 6, 0, 0)
+	extendsBtn.Parent = topFields
+	extendsBtn.Position = UDim2.new(0.5, 6, 0, 16)
+	iconLabel.Parent = topFields
+	iconLabel.Position = UDim2.fromOffset(0, 52)
+	iconPreview.Parent = topFields
+	iconPreview.Position = UDim2.fromOffset(0, 70)
+	iconBtn.Parent = topFields
+	iconBtn.Position = UDim2.fromOffset(30, 68)
+
+	local propsHeader = Instance.new("TextLabel")
+	propsHeader.BackgroundTransparency = 1
+	propsHeader.Size = UDim2.new(1, 0, 0, 16)
+	propsHeader.Font = Theme.fontBold
+	propsHeader.TextSize = 12
+	propsHeader.TextXAlignment = Enum.TextXAlignment.Left
+	propsHeader.TextColor3 = Theme.textMuted
+	propsHeader.Text = "PROPERTIES & SEGMENTS"
+	propsHeader.ZIndex = 62
+	propsHeader.LayoutOrder = 1
+	propsHeader.Parent = propsScroll
+
+	local footerFrame = Instance.new("Frame")
+	footer = footerFrame
+	footerFrame.Name = "Footer"
+	footerFrame.BackgroundColor3 = Theme.bgDeep
+	footerFrame.BorderSizePixel = 0
+	footerFrame.ZIndex = 62
+	footerFrame.Parent = panel
+	local footerLine = Instance.new("Frame")
+	footerLine.BackgroundColor3 = Theme.border
+	footerLine.BorderSizePixel = 0
+	footerLine.Size = UDim2.new(1, 0, 0, 1)
+	footerLine.ZIndex = 63
+	footerLine.Parent = footerFrame
+	resizePanel()
 
 	-- drafts: ordered categories + props
 	local categoryOrder: { string } = { "Data" }
@@ -468,11 +524,11 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 
 	rebuildProps = function()
 		for _, child in propsScroll:GetChildren() do
-			if child:IsA("Frame") or child:IsA("TextButton") then
+			if child:GetAttribute("_FraguaTypeEditorSection") == true then
 				child:Destroy()
 			end
 		end
-		local order = 1
+		local order = 2
 		for _, catName in categoryOrder do
 			local props = propsByCat[catName]
 			if not props then
@@ -487,6 +543,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			section.AutomaticSize = Enum.AutomaticSize.None
 			section.ClipsDescendants = true
 			section.LayoutOrder = order
+			section:SetAttribute("_FraguaTypeEditorSection", true)
 			section.ZIndex = 63
 			section.Parent = propsScroll
 			local sc = Instance.new("UICorner")
@@ -804,6 +861,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			section.BorderSizePixel = 0
 			section.Size = UDim2.new(1, 0, 0, 38 + #inherited * 26)
 			section.LayoutOrder = order
+			section:SetAttribute("_FraguaTypeEditorSection", true)
 			section.ZIndex = 63
 			section.Parent = propsScroll
 			local inheritedCorner = Instance.new("UICorner")
@@ -882,10 +940,8 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 
 	rebuildProps()
 
-	local addSectionBtn = Theme.makeButton(panel, "+ Segment", { Size = UDim2.fromOffset(96, 26) })
-	addSectionBtn.Position = UDim2.fromOffset(12, 1)
-	addSectionBtn.AnchorPoint = Vector2.new(0, 1)
-	addSectionBtn.Position = UDim2.new(0, 12, 1, -48)
+	local addSectionBtn = Theme.makeButton(propsScroll, "+ Segment", { Size = UDim2.fromOffset(96, 26) })
+	addSectionBtn.LayoutOrder = 100000
 	addSectionBtn.ZIndex = 62
 	addSectionBtn.MouseButton1Click:Connect(function()
 		local base = "Custom"
@@ -901,33 +957,34 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 
 	local errorLabel = Instance.new("TextLabel")
 	errorLabel.BackgroundTransparency = 1
-	errorLabel.Position = UDim2.new(0, 120, 1, -72)
-	errorLabel.Size = UDim2.new(1, -132, 0, 18)
+	errorLabel.Position = UDim2.fromOffset(12, 1)
+	errorLabel.Size = UDim2.new(1, -24, 0, 14)
 	errorLabel.Font = Theme.font
 	errorLabel.TextSize = 11
 	errorLabel.TextXAlignment = Enum.TextXAlignment.Left
 	errorLabel.TextColor3 = Theme.danger
 	errorLabel.Text = ""
 	errorLabel.ZIndex = 62
-	errorLabel.Parent = panel
+	errorLabel.Parent = footerFrame
 
-	local cancel = Theme.makeButton(panel, "Cancel", { Size = UDim2.fromOffset(80, 28) })
+	local cancel = Theme.makeButton(footerFrame, "Cancel", { Size = UDim2.fromOffset(80, 28) })
+	cancelButton = cancel
 	cancel.AnchorPoint = Vector2.new(1, 1)
-	cancel.Position = UDim2.new(1, -100, 1, -14)
 	cancel.ZIndex = 62
 	cancel.MouseButton1Click:Connect(function()
 		overlay:Destroy()
 	end)
 
 	local save = Theme.makeButton(
-		panel,
+		footerFrame,
 		if editing then "Save changes" else "Create & insert",
 		{ Size = UDim2.fromOffset(if editing then 108 else 116, 28) }
 	)
+	saveButton = save
 	save.AnchorPoint = Vector2.new(1, 1)
-	save.Position = UDim2.new(1, -12, 1, -14)
 	save.BackgroundColor3 = Theme.accent
 	save.ZIndex = 62
+	resizePanel()
 
 	if editing then
 		nameBox.Text = editing.id
