@@ -6,6 +6,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Constants = require(script.Parent.Parent.Shared.Constants)
 local EngineSchemas = require(script.Parent.EngineSchemas)
 local SchemaMigration = require(script.Parent.SchemaMigration)
+local SchemaResolver = require(script.Parent.SchemaResolver)
 
 export type PropDef = EngineSchemas.PropDef
 
@@ -129,19 +130,16 @@ function Registry.list(): { TypeDef }
 			if child:IsA("StringValue") then
 				raw = child.Value
 			else
-				-- Prefer requiring the module (returns JSON string); fall back to source scrape.
-				local ok, result = pcall(require, child)
-				if ok and typeof(result) == "string" then
-					raw = result
+				-- Decode current Source first. require() caches old values after Source edits.
+				local source = child.Source
+				local startPos = string.find(source, "[[", 1, true)
+				local endPos = startPos and string.find(source, "]]", startPos + 2, true)
+				local sourceRaw = if startPos and endPos then string.sub(source, startPos + 2, endPos - 1) else source
+				if decodeType(sourceRaw) then
+					raw = sourceRaw
 				else
-					local source = child.Source
-					local startPos = string.find(source, "[[", 1, true)
-					local endPos = startPos and string.find(source, "]]", startPos + 2, true)
-					if startPos and endPos then
-						raw = string.sub(source, startPos + 2, endPos - 1)
-					else
-						raw = source
-					end
+					local ok, result = pcall(require, child)
+					raw = if ok and typeof(result) == "string" then result else sourceRaw
 				end
 			end
 			local def = decodeType(raw)
@@ -316,41 +314,13 @@ function Registry.migrateInstances(typeId: string, previous: TypeDef?, nextDef: 
 	ChangeHistoryService:SetWaypoint("Fragua Migrate Type Done")
 end
 
-local function mergeProps(base: { PropDef }, extra: { PropDef }): { PropDef }
-	local byName: { [string]: PropDef } = {}
-	local order: { string } = {}
-	for _, prop in base do
-		byName[prop.name] = prop
-		table.insert(order, prop.name)
-	end
-	for _, prop in extra do
-		if not byName[prop.name] then
-			table.insert(order, prop.name)
-		end
-		byName[prop.name] = prop
-	end
-	local merged = {}
-	for _, name in order do
-		table.insert(merged, byName[name])
-	end
-	return merged
-end
-
-function Registry.resolvedSchema(def: TypeDef, visiting: { [string]: boolean }?): { PropDef }
-	visiting = visiting or {}
-	if visiting[def.id] then
+function Registry.resolvedSchema(def: TypeDef): { PropDef }
+	local schema, err = SchemaResolver.resolve(def, Registry.get, EngineSchemas.get)
+	if err then
+		warn(`[Fragua] {err.message}`)
 		return table.clone(def.properties)
 	end
-	visiting[def.id] = true
-
-	local baseProps: { PropDef }
-	local parentCustom = Registry.get(def.extends)
-	if parentCustom then
-		baseProps = Registry.resolvedSchema(parentCustom, visiting)
-	else
-		baseProps = EngineSchemas.get(def.extends)
-	end
-	return mergeProps(baseProps, def.properties)
+	return schema
 end
 
 function Registry.isFraguaInstance(instance: Instance): boolean

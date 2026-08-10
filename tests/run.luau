@@ -11,4 +11,5 @@ TestRunner.run({
 	EditorLayout = require("./EditorLayout.spec"),
 	SyntaxHighlighter = require("./SyntaxHighlighter.spec"),
 	PreviewCommit = require("./PreviewCommit.spec"),
+	SchemaResolver = require("./SchemaResolver.spec"),
 })
