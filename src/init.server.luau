@@ -7,6 +7,7 @@ local ScriptEditor = require(script.App.ScriptEditor)
 local SettingsStore = require(script.App.Settings.Store)
 local EnsurePlaceModules = require(script.App.Runtime.EnsurePlaceModules)
 local ScriptInjector = require(script.App.Runtime.ScriptInjector)
+local TypeCatalog = require(script.App.Runtime.TypeCatalog)
 local Host = require(script.App.Behaviors.Host)
 local Registry = require(script.App.Types.Registry)
 local Constants = require(script.App.Shared.Constants)
@@ -59,6 +60,10 @@ scriptWidget.Title = "Fragua Script"
 scriptWidget.Name = "FraguaScriptEditor"
 
 Registry.seedDefaults()
+TypeCatalog.sync(Registry)
+local catalogConnection = Registry.Changed:Connect(function()
+	TypeCatalog.sync(Registry)
+end)
 Host.start()
 
 local explorerApi = Explorer.mount(explorerWidget)
@@ -104,6 +109,7 @@ end)
 
 plugin.Unloading:Connect(function()
 	scriptInjector.destroy()
+	catalogConnection:Disconnect()
 	if explorerApi and explorerApi.destroy then
 		explorerApi.destroy()
 	end

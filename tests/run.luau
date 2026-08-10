@@ -18,4 +18,5 @@ TestRunner.run({
 	IconData = require("./IconData.spec"),
 	EnginePropResolver = require("./EnginePropResolver.spec"),
 	ScriptHeader = require("./ScriptHeader.spec"),
+	TypeCatalog = require("./TypeCatalog.spec"),
 })
