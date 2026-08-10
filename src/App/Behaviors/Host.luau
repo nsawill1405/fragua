@@ -39,8 +39,9 @@ end
 local function callHook(instance: Instance, hook: string, ...)
 	local behavior = loadBehavior(instance)
 	if behavior and typeof(behavior[hook]) == "function" then
+		local args = table.pack(...)
 		Util.safePcall(`{instance.Name}.{hook}`, function()
-			behavior[hook](instance, ...)
+			behavior[hook](instance, table.unpack(args, 1, args.n))
 		end)
 	end
 end

@@ -41,7 +41,7 @@ function Util.attributeTypeName(value: any): string
 end
 
 function Util.parseValue(valueType: string, text: string): (boolean, any)
-	if valueType == "string" then
+	if valueType == "string" or valueType == "enum" then
 		return true, text
 	elseif valueType == "number" then
 		local n = tonumber(text)

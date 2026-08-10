@@ -1,120 +1,262 @@
--- Curated readable/writable engine properties for the Properties panel.
+-- Curated readable/writable engine properties with categories + enum metadata.
+
+export type EngineProp = {
+	name: string,
+	category: string,
+	valueType: string?, -- string | number | boolean | Color3 | Vector3 | enum
+	readonly: boolean?,
+	enumItems: { string }?,
+	enumType: string?, -- Enum family name, e.g. "Material"
+}
 
 local EngineProps = {}
 
-local BY_CLASS: { [string]: { string } } = {
-	Instance = { "Name", "Archivable", "ClassName" },
-	Folder = { "Name", "Archivable" },
-	Configuration = { "Name", "Archivable" },
+local MATERIALS = require(script.Parent.Parent.Types.EngineSchemas).materials()
+
+local BY_CLASS: { [string]: { EngineProp } } = {
+	Instance = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "ClassName", category = "Data", valueType = "string", readonly = true },
+		{ name = "Archivable", category = "Data", valueType = "boolean" },
+	},
+	Workspace = {
+		{ name = "Name", category = "Data", valueType = "string", readonly = true },
+		{ name = "ClassName", category = "Data", valueType = "string", readonly = true },
+		{ name = "Gravity", category = "World", valueType = "number" },
+		{ name = "FallenPartsDestroyHeight", category = "World", valueType = "number" },
+		{ name = "AllowThirdPartySales", category = "Behavior", valueType = "boolean" },
+		{ name = "StreamingEnabled", category = "Streaming", valueType = "boolean" },
+	},
+	Lighting = {
+		{ name = "Name", category = "Data", valueType = "string", readonly = true },
+		{ name = "ClassName", category = "Data", valueType = "string", readonly = true },
+		{ name = "Ambient", category = "Appearance", valueType = "Color3" },
+		{ name = "OutdoorAmbient", category = "Appearance", valueType = "Color3" },
+		{ name = "ColorShift_Top", category = "Appearance", valueType = "Color3" },
+		{ name = "ColorShift_Bottom", category = "Appearance", valueType = "Color3" },
+		{ name = "Brightness", category = "Appearance", valueType = "number" },
+		{ name = "ClockTime", category = "Celestial", valueType = "number" },
+		{ name = "GeographicLatitude", category = "Celestial", valueType = "number" },
+		{ name = "GlobalShadows", category = "Appearance", valueType = "boolean" },
+		{ name = "FogColor", category = "Fog", valueType = "Color3" },
+		{ name = "FogStart", category = "Fog", valueType = "number" },
+		{ name = "FogEnd", category = "Fog", valueType = "number" },
+	},
+	Players = {
+		{ name = "Name", category = "Data", valueType = "string", readonly = true },
+		{ name = "ClassName", category = "Data", valueType = "string", readonly = true },
+		{ name = "CharacterAutoLoads", category = "Behavior", valueType = "boolean" },
+		{ name = "RespawnTime", category = "Behavior", valueType = "number" },
+	},
+	SoundService = {
+		{ name = "Name", category = "Data", valueType = "string", readonly = true },
+		{ name = "ClassName", category = "Data", valueType = "string", readonly = true },
+		{ name = "AmbientReverb", category = "Audio", valueType = "enum", enumType = "ReverbType" },
+		{ name = "DistanceFactor", category = "Audio", valueType = "number" },
+		{ name = "DopplerScale", category = "Audio", valueType = "number" },
+		{ name = "RolloffScale", category = "Audio", valueType = "number" },
+	},
+	StarterGui = {
+		{ name = "Name", category = "Data", valueType = "string", readonly = true },
+		{ name = "ClassName", category = "Data", valueType = "string", readonly = true },
+		{ name = "ResetPlayerGuiOnSpawn", category = "Behavior", valueType = "boolean" },
+		{ name = "ScreenOrientation", category = "Behavior", valueType = "enum", enumType = "ScreenOrientation" },
+	},
 	Part = {
-		"Name",
-		"Anchored",
-		"CanCollide",
-		"CanQuery",
-		"CanTouch",
-		"CastShadow",
-		"Transparency",
-		"Reflectance",
-		"Color",
-		"Size",
-		"Position",
-		"Orientation",
-		"Material",
-		"Shape",
-		"BrickColor",
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Anchored", category = "Behavior", valueType = "boolean" },
+		{ name = "CanCollide", category = "Behavior", valueType = "boolean" },
+		{ name = "CanQuery", category = "Behavior", valueType = "boolean" },
+		{ name = "CanTouch", category = "Behavior", valueType = "boolean" },
+		{ name = "CastShadow", category = "Appearance", valueType = "boolean" },
+		{ name = "Transparency", category = "Appearance", valueType = "number" },
+		{ name = "Reflectance", category = "Appearance", valueType = "number" },
+		{ name = "Color", category = "Appearance", valueType = "Color3" },
+		{ name = "Material", category = "Appearance", valueType = "enum", enumType = "Material", enumItems = MATERIALS },
+		{ name = "Shape", category = "Part", valueType = "enum", enumType = "PartType", enumItems = {
+			"Ball",
+			"Block",
+			"Cylinder",
+			"Wedge",
+			"CornerWedge",
+		} },
+		{ name = "Size", category = "Transform", valueType = "Vector3" },
+		{ name = "Position", category = "Transform", valueType = "Vector3" },
+		{ name = "Orientation", category = "Transform", valueType = "Vector3" },
 	},
 	MeshPart = {
-		"Name",
-		"Anchored",
-		"CanCollide",
-		"Transparency",
-		"Color",
-		"Size",
-		"Position",
-		"Orientation",
-		"Material",
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Anchored", category = "Behavior", valueType = "boolean" },
+		{ name = "CanCollide", category = "Behavior", valueType = "boolean" },
+		{ name = "Transparency", category = "Appearance", valueType = "number" },
+		{ name = "Color", category = "Appearance", valueType = "Color3" },
+		{ name = "Material", category = "Appearance", valueType = "enum", enumType = "Material", enumItems = MATERIALS },
+		{ name = "Size", category = "Transform", valueType = "Vector3" },
+		{ name = "Position", category = "Transform", valueType = "Vector3" },
 	},
-	Model = { "Name", "PrimaryPart" },
+	SpawnLocation = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Behavior", valueType = "boolean" },
+		{ name = "Duration", category = "Behavior", valueType = "number" },
+		{ name = "Neutral", category = "Behavior", valueType = "boolean" },
+		{ name = "Anchored", category = "Behavior", valueType = "boolean" },
+		{ name = "Color", category = "Appearance", valueType = "Color3" },
+		{ name = "Size", category = "Transform", valueType = "Vector3" },
+		{ name = "Position", category = "Transform", valueType = "Vector3" },
+	},
+	Model = {
+		{ name = "Name", category = "Data", valueType = "string" },
+	},
 	Humanoid = {
-		"Name",
-		"Health",
-		"MaxHealth",
-		"WalkSpeed",
-		"JumpPower",
-		"JumpHeight",
-		"HipHeight",
-		"AutoRotate",
-		"DisplayName",
-		"NameDisplayDistance",
-		"HealthDisplayDistance",
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Health", category = "Health", valueType = "number" },
+		{ name = "MaxHealth", category = "Health", valueType = "number" },
+		{ name = "WalkSpeed", category = "Control", valueType = "number" },
+		{ name = "JumpPower", category = "Control", valueType = "number" },
+		{ name = "JumpHeight", category = "Control", valueType = "number" },
+		{ name = "HipHeight", category = "Control", valueType = "number" },
+		{ name = "AutoRotate", category = "Control", valueType = "boolean" },
+		{ name = "DisplayName", category = "Display", valueType = "string" },
+		{ name = "NameDisplayDistance", category = "Display", valueType = "number" },
+		{ name = "HealthDisplayDistance", category = "Display", valueType = "number" },
 	},
-	Script = { "Name", "Disabled", "RunContext" },
-	LocalScript = { "Name", "Disabled" },
-	ModuleScript = { "Name" },
-	BillboardGui = { "Name", "Enabled", "AlwaysOnTop", "Size", "StudsOffset", "MaxDistance" },
-	StringValue = { "Name", "Value" },
-	BoolValue = { "Name", "Value" },
-	NumberValue = { "Name", "Value" },
-	IntValue = { "Name", "Value" },
-	ObjectValue = { "Name", "Value" },
-	RemoteEvent = { "Name" },
-	RemoteFunction = { "Name" },
-	Highlight = { "Name", "Enabled", "FillColor", "OutlineColor", "FillTransparency", "OutlineTransparency" },
-	ProximityPrompt = { "Name", "ActionText", "ObjectText", "HoldDuration", "MaxActivationDistance", "Enabled" },
-	Sound = { "Name", "SoundId", "Volume", "PlaybackSpeed", "Looped", "Playing" },
-	PointLight = { "Name", "Enabled", "Brightness", "Color", "Range" },
-	SpotLight = { "Name", "Enabled", "Brightness", "Color", "Range", "Angle" },
-	Decal = { "Name", "Texture", "Transparency", "Color3" },
-	Texture = { "Name", "Texture", "Transparency", "Color3", "StudsPerTileU", "StudsPerTileV" },
-	Frame = { "Name", "BackgroundColor3", "BackgroundTransparency", "BorderSizePixel", "Visible", "Size", "Position" },
+	Script = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Disabled", category = "Data", valueType = "boolean" },
+		{ name = "RunContext", category = "Data", valueType = "enum", enumType = "RunContext", enumItems = {
+			"Legacy",
+			"Server",
+			"Client",
+			"Plugin",
+		} },
+	},
+	LocalScript = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Disabled", category = "Data", valueType = "boolean" },
+	},
+	ModuleScript = {
+		{ name = "Name", category = "Data", valueType = "string" },
+	},
+	Folder = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Archivable", category = "Data", valueType = "boolean" },
+	},
+	Configuration = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Archivable", category = "Data", valueType = "boolean" },
+	},
+	Sound = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "SoundId", category = "Data", valueType = "string" },
+		{ name = "Volume", category = "Audio", valueType = "number" },
+		{ name = "PlaybackSpeed", category = "Audio", valueType = "number" },
+		{ name = "Looped", category = "Audio", valueType = "boolean" },
+		{ name = "Playing", category = "Audio", valueType = "boolean" },
+	},
+	PointLight = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Brightness", category = "Appearance", valueType = "number" },
+		{ name = "Color", category = "Appearance", valueType = "Color3" },
+		{ name = "Range", category = "Appearance", valueType = "number" },
+	},
+	SpotLight = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "Brightness", category = "Appearance", valueType = "number" },
+		{ name = "Color", category = "Appearance", valueType = "Color3" },
+		{ name = "Range", category = "Appearance", valueType = "number" },
+		{ name = "Angle", category = "Appearance", valueType = "number" },
+	},
+	Highlight = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+		{ name = "FillColor", category = "Appearance", valueType = "Color3" },
+		{ name = "OutlineColor", category = "Appearance", valueType = "Color3" },
+		{ name = "FillTransparency", category = "Appearance", valueType = "number" },
+		{ name = "OutlineTransparency", category = "Appearance", valueType = "number" },
+	},
+	Frame = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Visible", category = "Data", valueType = "boolean" },
+		{ name = "BackgroundColor3", category = "Appearance", valueType = "Color3" },
+		{ name = "BackgroundTransparency", category = "Appearance", valueType = "number" },
+		{ name = "BorderSizePixel", category = "Appearance", valueType = "number" },
+	},
 	TextLabel = {
-		"Name",
-		"Text",
-		"TextColor3",
-		"TextSize",
-		"Font",
-		"BackgroundTransparency",
-		"Visible",
-		"Size",
-		"Position",
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Text", category = "Text", valueType = "string" },
+		{ name = "TextColor3", category = "Text", valueType = "Color3" },
+		{ name = "TextSize", category = "Text", valueType = "number" },
+		{ name = "BackgroundTransparency", category = "Appearance", valueType = "number" },
+		{ name = "Visible", category = "Data", valueType = "boolean" },
 	},
 	TextButton = {
-		"Name",
-		"Text",
-		"TextColor3",
-		"TextSize",
-		"Font",
-		"BackgroundColor3",
-		"Visible",
-		"Size",
-		"Position",
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Text", category = "Text", valueType = "string" },
+		{ name = "TextColor3", category = "Text", valueType = "Color3" },
+		{ name = "TextSize", category = "Text", valueType = "number" },
+		{ name = "BackgroundColor3", category = "Appearance", valueType = "Color3" },
+		{ name = "Visible", category = "Data", valueType = "boolean" },
 	},
-	Camera = { "Name", "FieldOfView", "CameraType", "HeadLocked" },
-	SpawnLocation = { "Name", "Enabled", "Duration", "Neutral", "TeamColor", "Anchored", "Size", "Position", "Color" },
-	Tool = { "Name", "ToolTip", "CanBeDropped", "RequiresHandle", "Enabled" },
+	ProximityPrompt = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "ActionText", category = "Data", valueType = "string" },
+		{ name = "ObjectText", category = "Data", valueType = "string" },
+		{ name = "HoldDuration", category = "Data", valueType = "number" },
+		{ name = "MaxActivationDistance", category = "Data", valueType = "number" },
+		{ name = "Enabled", category = "Data", valueType = "boolean" },
+	},
+	Camera = {
+		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "FieldOfView", category = "Camera", valueType = "number" },
+		{ name = "CameraType", category = "Camera", valueType = "enum", enumType = "CameraType" },
+	},
 }
 
-local READONLY = {
-	ClassName = true,
-	Position = true,
-	Orientation = true,
+-- Generic service fallback (read-only identity)
+local SERVICE_FALLBACK: { EngineProp } = {
+	{ name = "Name", category = "Data", valueType = "string", readonly = true },
+	{ name = "ClassName", category = "Data", valueType = "string", readonly = true },
 }
 
-function EngineProps.forInstance(instance: Instance): { { name: string, readonly: boolean } }
-	local names = BY_CLASS[instance.ClassName] or BY_CLASS.Instance
-	local list = {}
-	for _, name in names do
-		local ok = pcall(function()
-			local _ = (instance :: any)[name]
-		end)
-		if ok then
-			table.insert(list, {
-				name = name,
-				readonly = READONLY[name] == true or name == "ClassName",
-			})
+local SERVICE_NAMES = {
+	Workspace = true,
+	Players = true,
+	Lighting = true,
+	MaterialService = true,
+	ReplicatedFirst = true,
+	ReplicatedStorage = true,
+	ServerScriptService = true,
+	ServerStorage = true,
+	StarterGui = true,
+	StarterPack = true,
+	StarterPlayer = true,
+	Teams = true,
+	SoundService = true,
+	TextChatService = true,
+}
+
+function EngineProps.forInstance(instance: Instance): { EngineProp }
+	local list = BY_CLASS[instance.ClassName]
+	if not list then
+		if SERVICE_NAMES[instance.ClassName] or instance.Parent == game then
+			list = SERVICE_FALLBACK
+		else
+			list = BY_CLASS.Instance
 		end
 	end
-	return list
+
+	local out = {}
+	for _, prop in list do
+		local ok = pcall(function()
+			local _ = (instance :: any)[prop.name]
+		end)
+		if ok then
+			table.insert(out, prop)
+		end
+	end
+	return out
 end
 
 function EngineProps.get(instance: Instance, name: string): any
@@ -122,13 +264,47 @@ function EngineProps.get(instance: Instance, name: string): any
 end
 
 function EngineProps.set(instance: Instance, name: string, value: any): boolean
-	if READONLY[name] then
-		return false
-	end
 	local ok = pcall(function()
+		local current = (instance :: any)[name]
+		if typeof(current) == "EnumItem" and typeof(value) == "string" then
+			local enumType = current.EnumType
+			local item = (enumType :: any)[value]
+			if item then
+				(instance :: any)[name] = item
+				return
+			end
+		end
 		(instance :: any)[name] = value
 	end)
 	return ok
+end
+
+function EngineProps.resolveEnumItems(prop: EngineProp, currentValue: any): { string }?
+	if prop.enumItems then
+		return prop.enumItems
+	end
+	if typeof(currentValue) == "EnumItem" then
+		local items = {}
+		for _, item in currentValue.EnumType:GetEnumItems() do
+			table.insert(items, item.Name)
+		end
+		table.sort(items)
+		return items
+	end
+	if prop.enumType then
+		local ok, enumType = pcall(function()
+			return (Enum :: any)[prop.enumType]
+		end)
+		if ok and enumType then
+			local items = {}
+			for _, item in enumType:GetEnumItems() do
+				table.insert(items, item.Name)
+			end
+			table.sort(items)
+			return items
+		end
+	end
+	return nil
 end
 
 return EngineProps
