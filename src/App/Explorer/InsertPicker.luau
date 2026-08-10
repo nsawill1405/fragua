@@ -1,4 +1,5 @@
 local Theme = require(script.Parent.Parent.Shared.Theme)
+local UiUtil = require(script.Parent.Parent.Shared.UiUtil)
 local EngineSchemas = require(script.Parent.Parent.Types.EngineSchemas)
 local IconCatalog = require(script.Parent.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Parent.Types.Registry)
@@ -10,13 +11,27 @@ export type InsertChoice =
 	{ kind: "engine", className: string }
 	| { kind: "custom", typeId: string }
 	| { kind: "create_type" }
-	| { kind: "delete_type" }
+
+local creatableCache: { [string]: boolean } = {}
+local function canCreateClass(className: string): boolean
+	if creatableCache[className] ~= nil then
+		return creatableCache[className]
+	end
+	local ok = pcall(function()
+		local o = Instance.new(className)
+		o:Destroy()
+	end)
+	creatableCache[className] = ok
+	return ok
+end
 
 function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
+	local sectionCollapsed: { [string]: boolean } = {}
+
 	local overlay = Instance.new("Frame")
 	overlay.Name = "InsertPicker"
 	overlay.BackgroundColor3 = Color3.new(0, 0, 0)
-	overlay.BackgroundTransparency = 0.35
+	overlay.BackgroundTransparency = 0.4
 	overlay.Size = UDim2.fromScale(1, 1)
 	overlay.ZIndex = 40
 	overlay.Parent = host
@@ -24,40 +39,58 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.fromOffset(360, 420)
+	panel.Size = UDim2.fromOffset(320, 440)
 	panel.BackgroundColor3 = Theme.bg
 	panel.BorderSizePixel = 0
 	panel.ZIndex = 41
 	panel.Parent = overlay
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
+	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = panel
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Theme.borderLight
+	stroke.Thickness = 1
+	stroke.Parent = panel
+
+	local titleBar = Instance.new("Frame")
+	titleBar.BackgroundTransparency = 1
+	titleBar.Size = UDim2.new(1, 0, 0, 34)
+	titleBar.ZIndex = 42
+	titleBar.Parent = panel
 
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(12, 8)
-	title.Size = UDim2.new(1, -24, 0, 24)
+	title.Position = UDim2.fromOffset(14, 8)
+	title.Size = UDim2.new(1, -48, 0, 20)
 	title.Font = Theme.fontBold
-	title.TextSize = 16
+	title.TextSize = 14
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.TextColor3 = Theme.textBright
 	title.Text = "Insert Object"
-	title.ZIndex = 42
-	title.Parent = panel
+	title.ZIndex = 43
+	title.Parent = titleBar
+
+	local close = UiUtil.makeCloseButton(titleBar, 22)
+	close.Position = UDim2.new(1, -30, 0, 6)
+	close.ZIndex = 43
+	close.MouseButton1Click:Connect(function()
+		overlay:Destroy()
+	end)
 
 	local search = Instance.new("TextBox")
-	search.PlaceholderText = "Search classes and custom types…"
+	search.PlaceholderText = "Search…"
 	search.ClearTextOnFocus = false
 	search.Text = ""
 	search.Font = Theme.font
-	search.TextSize = 14
+	search.TextSize = 13
 	search.TextColor3 = Theme.textBright
 	search.PlaceholderColor3 = Theme.textMuted
 	search.BackgroundColor3 = Theme.inputBg
 	search.BorderSizePixel = 0
-	search.Position = UDim2.fromOffset(12, 40)
-	search.Size = UDim2.new(1, -24, 0, 28)
+	search.Position = UDim2.fromOffset(14, 38)
+	search.Size = UDim2.new(1, -28, 0, 26)
 	search.ZIndex = 42
 	search.Parent = panel
 
@@ -68,81 +101,148 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.BackgroundColor3 = Theme.bgDeep
 	scroll.BorderSizePixel = 0
-	scroll.Position = UDim2.fromOffset(12, 76)
-	scroll.Size = UDim2.new(1, -24, 1, -88)
-	scroll.ScrollBarThickness = 6
+	scroll.Position = UDim2.fromOffset(14, 72)
+	scroll.Size = UDim2.new(1, -28, 1, -86)
+	scroll.ScrollBarThickness = 4
+	scroll.ScrollBarImageColor3 = Theme.borderLight
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.CanvasSize = UDim2.new()
 	scroll.ZIndex = 42
 	scroll.Parent = panel
 
+	local listCorner = Instance.new("UICorner")
+	listCorner.CornerRadius = Theme.corner
+	listCorner.Parent = scroll
+
 	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 2)
+	layout.Padding = UDim.new(0, 0)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = scroll
 
 	local pad = Instance.new("UIPadding")
 	pad.PaddingTop = UDim.new(0, 4)
 	pad.PaddingBottom = UDim.new(0, 4)
-	pad.PaddingLeft = UDim.new(0, 4)
-	pad.PaddingRight = UDim.new(0, 4)
 	pad.Parent = scroll
 
-	local function sectionHeader(text: string, order: number)
-		local header = Instance.new("TextLabel")
-		header.BackgroundColor3 = Theme.section
-		header.BorderSizePixel = 0
-		header.Size = UDim2.new(1, -8, 0, 22)
-		header.Font = Theme.fontBold
-		header.TextSize = 12
-		header.TextXAlignment = Enum.TextXAlignment.Left
-		header.TextColor3 = Theme.textMuted
-		header.Text = "  " .. text
-		header.LayoutOrder = order
-		header.ZIndex = 43
-		header.Parent = scroll
-	end
-
-	local function row(label: string, iconId: string?, order: number, handler: () -> ())
+	local function row(opts: {
+		label: string,
+		iconId: string?,
+		order: number,
+		onClick: () -> (),
+		onDelete: (() -> ())?,
+	})
 		local btn = Instance.new("TextButton")
 		btn.AutoButtonColor = false
-		btn.BackgroundColor3 = Theme.bgRaised
+		btn.BackgroundColor3 = Theme.bgHover
+		btn.BackgroundTransparency = 1
 		btn.BorderSizePixel = 0
-		btn.Size = UDim2.new(1, -8, 0, 26)
+		btn.Size = UDim2.new(1, -8, 0, 24)
 		btn.Text = ""
-		btn.LayoutOrder = order
+		btn.LayoutOrder = opts.order
 		btn.ZIndex = 43
 		btn.Parent = scroll
 
 		local rc = Instance.new("UICorner")
-		rc.CornerRadius = UDim.new(0, 3)
+		rc.CornerRadius = UDim.new(0, 4)
 		rc.Parent = btn
 
-		if iconId then
-			local icon = IconCatalog.createIconWidget(btn, iconId, 16)
+		if opts.iconId then
+			local icon = IconCatalog.createIconWidget(btn, opts.iconId, 14)
 			icon.Position = UDim2.fromOffset(8, 5)
-			icon.ZIndex = 44
+			IconCatalog.setZIndex(icon, 45)
 		end
 
 		local text = Instance.new("TextLabel")
 		text.BackgroundTransparency = 1
-		text.Position = UDim2.fromOffset(if iconId then 30 else 10, 0)
-		text.Size = UDim2.new(1, -36, 1, 0)
+		text.Position = UDim2.fromOffset(if opts.iconId then 28 else 10, 0)
+		text.Size = UDim2.new(1, if opts.onDelete then -48 else -32, 1, 0)
 		text.Font = Theme.font
-		text.TextSize = 14
+		text.TextSize = 13
 		text.TextXAlignment = Enum.TextXAlignment.Left
 		text.TextColor3 = Theme.textBright
-		text.Text = label
+		text.TextTruncate = Enum.TextTruncate.AtEnd
+		text.Text = opts.label
 		text.ZIndex = 44
+		text.Active = false
 		text.Parent = btn
 
+		if opts.onDelete then
+			local del = Instance.new("TextButton")
+			del.AutoButtonColor = false
+			del.BackgroundTransparency = 1
+			del.AnchorPoint = Vector2.new(1, 0.5)
+			del.Position = UDim2.new(1, -6, 0.5, 0)
+			del.Size = UDim2.fromOffset(18, 18)
+			del.Font = Enum.Font.GothamBold
+			del.TextSize = 14
+			del.Text = "×"
+			del.TextColor3 = Theme.textMuted
+			del.ZIndex = 46
+			del.Parent = btn
+			del.MouseEnter:Connect(function()
+				del.TextColor3 = Theme.danger
+			end)
+			del.MouseLeave:Connect(function()
+				del.TextColor3 = Theme.textMuted
+			end)
+			del.MouseButton1Click:Connect(function()
+				opts.onDelete()
+			end)
+		end
+
 		btn.MouseEnter:Connect(function()
-			btn.BackgroundColor3 = Theme.bgHover
+			btn.BackgroundTransparency = 0
 		end)
 		btn.MouseLeave:Connect(function()
-			btn.BackgroundColor3 = Theme.bgRaised
+			btn.BackgroundTransparency = 1
 		end)
-		btn.MouseButton1Click:Connect(handler)
+		btn.MouseButton1Click:Connect(opts.onClick)
+	end
+
+	local function sectionHeader(text: string, order: number, collapsed: boolean, onToggle: () -> ())
+		local color = UiUtil.sectionColor(text)
+		local header = Instance.new("TextButton")
+		header.AutoButtonColor = false
+		header.BackgroundColor3 = Theme.section
+		header.BorderSizePixel = 0
+		header.Size = UDim2.new(1, -8, 0, 22)
+		header.Text = ""
+		header.LayoutOrder = order
+		header.ZIndex = 43
+		header.Parent = scroll
+
+		local accent = Instance.new("Frame")
+		accent.BackgroundColor3 = color
+		accent.BorderSizePixel = 0
+		accent.Size = UDim2.new(0, 3, 1, -4)
+		accent.Position = UDim2.fromOffset(0, 2)
+		accent.ZIndex = 44
+		accent.Parent = header
+
+		local twist = Instance.new("TextLabel")
+		twist.BackgroundTransparency = 1
+		twist.Position = UDim2.fromOffset(10, 0)
+		twist.Size = UDim2.fromOffset(14, 22)
+		twist.Font = Enum.Font.GothamBold
+		twist.TextSize = 11
+		twist.TextColor3 = Theme.textMuted
+		twist.Text = if collapsed then ">" else "v"
+		twist.ZIndex = 44
+		twist.Parent = header
+
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromOffset(26, 0)
+		label.Size = UDim2.new(1, -30, 1, 0)
+		label.Font = Theme.fontBold
+		label.TextSize = 10
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextColor3 = color
+		label.Text = string.upper(text)
+		label.ZIndex = 44
+		label.Parent = header
+
+		header.MouseButton1Click:Connect(onToggle)
 	end
 
 	local function rebuild(filter: string)
@@ -153,44 +253,102 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		end
 		local lower = string.lower(filter)
 		local order = 1
+		local filtering = lower ~= ""
 
-		sectionHeader("Custom", order)
-		order += 1
+		local function showSection(name: string): boolean
+			if filtering then
+				return true -- auto-expand while filtering
+			end
+			return not sectionCollapsed[name]
+		end
 
-		row("Create New Type…", "emoji_plus", order, function()
-			overlay:Destroy()
-			onChoose({ kind = "create_type" })
+		sectionHeader("Custom", order, sectionCollapsed.Custom == true and not filtering, function()
+			sectionCollapsed.Custom = not sectionCollapsed.Custom
+			rebuild(search.Text)
 		end)
 		order += 1
 
-		row("Delete Type…", "emoji_cross", order, function()
-			overlay:Destroy()
-			onChoose({ kind = "delete_type" })
-		end)
-		order += 1
-
-		for _, def in Registry.list() do
-			if lower == "" or string.find(string.lower(def.name), lower, 1, true) then
-				local typeId = def.id
-				row(def.name .. "  (Fragua)", def.icon, order, function()
+		if showSection("Custom") then
+			row({
+				label = "Create New Type…",
+				iconId = "emoji_plus",
+				order = order,
+				onClick = function()
 					overlay:Destroy()
-					onChoose({ kind = "custom", typeId = typeId })
-				end)
+					onChoose({ kind = "create_type" })
+				end,
+			})
+			order += 1
+
+			local customCount = 0
+			for _, def in Registry.list() do
+				if lower == "" or string.find(string.lower(def.name), lower, 1, true) then
+					local typeId = def.id
+					row({
+						label = def.name,
+						iconId = def.icon,
+						order = order,
+						onClick = function()
+							overlay:Destroy()
+							onChoose({ kind = "custom", typeId = typeId })
+						end,
+						onDelete = function()
+							Registry.delete(typeId)
+							rebuild(search.Text)
+						end,
+					})
+					order += 1
+					customCount += 1
+				end
+			end
+			if customCount == 0 and lower == "" then
+				local empty = Instance.new("TextLabel")
+				empty.BackgroundTransparency = 1
+				empty.Size = UDim2.new(1, -8, 0, 20)
+				empty.Font = Theme.font
+				empty.TextSize = 11
+				empty.TextColor3 = Theme.textMuted
+				empty.TextXAlignment = Enum.TextXAlignment.Left
+				empty.Text = "  No custom types yet"
+				empty.LayoutOrder = order
+				empty.ZIndex = 43
+				empty.Parent = scroll
 				order += 1
 			end
 		end
 
-		sectionHeader("Engine", order)
-		order += 1
-
-		for _, className in EngineSchemas.insertable() do
-			if lower == "" or string.find(string.lower(className), lower, 1, true) then
-				local cn = className
-				row(className, "class_" .. className, order, function()
-					overlay:Destroy()
-					onChoose({ kind = "engine", className = cn })
+		for _, section in EngineSchemas.insertSections() do
+			local matched = {}
+			for _, className in section.classes do
+				if lower == "" or string.find(string.lower(className), lower, 1, true) then
+					if canCreateClass(className) then
+						table.insert(matched, className)
+					end
+				end
+			end
+			if #matched > 0 then
+				local titleText = section.title
+				sectionHeader(titleText, order, sectionCollapsed[titleText] == true and not filtering, function()
+					sectionCollapsed[titleText] = not sectionCollapsed[titleText]
+					rebuild(search.Text)
 				end)
 				order += 1
+
+				if showSection(titleText) then
+					for _, className in matched do
+						local cn = className
+						row({
+							label = className,
+							iconId = "class_" .. className,
+							order = order,
+							onClick = function()
+								overlay:Destroy()
+								onChoose({ kind = "engine", className = cn })
+							end,
+						})
+						order += 1
+					end
+				end
 			end
 		end
 	end
@@ -199,24 +357,20 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		rebuild(search.Text)
 	end)
 	rebuild("")
-
-	local close = Theme.makeButton(panel, "✕", { Size = UDim2.fromOffset(28, 24) })
-	close.Position = UDim2.new(1, -40, 0, 8)
-	close.ZIndex = 42
-	close.MouseButton1Click:Connect(function()
-		overlay:Destroy()
-	end)
+	search:CaptureFocus()
 end
 
-function InsertPicker.handleChoice(host: Instance, choice: InsertChoice, parent: Instance?, afterInsert: (Instance) -> (), refresh: () -> ())
+function InsertPicker.handleChoice(
+	host: Instance,
+	choice: InsertChoice,
+	parent: Instance?,
+	afterInsert: (Instance) -> (),
+	refresh: () -> ()
+)
 	if choice.kind == "create_type" then
 		TypeEditor.open(host, function(_id)
 			refresh()
 		end)
-		return
-	end
-	if choice.kind == "delete_type" then
-		TypeEditor.openDelete(host, refresh)
 		return
 	end
 	if not parent then
@@ -232,7 +386,7 @@ function InsertPicker.handleChoice(host: Instance, choice: InsertChoice, parent:
 		if ok and inst then
 			afterInsert(inst)
 		else
-			warn(`[Fragua] Could not create {choice.className}`)
+			warn("[Fragua] Could not create " .. choice.className)
 		end
 		return
 	end

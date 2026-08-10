@@ -1,4 +1,4 @@
--- Curated property schemas for common engine classes (inheritance bases).
+-- Curated property schemas + insertable class categories.
 
 export type PropDef = {
 	name: string,
@@ -18,36 +18,57 @@ local INSTANCE_PROPS = props({
 	{ name = "Archivable", valueType = "boolean", default = true, category = "Data" },
 })
 
+local MATERIALS = {
+	"Plastic",
+	"Wood",
+	"Slate",
+	"Concrete",
+	"CorrodedMetal",
+	"DiamondPlate",
+	"Foil",
+	"Grass",
+	"Ice",
+	"Marble",
+	"Granite",
+	"Brick",
+	"Pebble",
+	"Sand",
+	"Fabric",
+	"SmoothPlastic",
+	"Metal",
+	"WoodPlanks",
+	"Glass",
+	"ForceField",
+	"Neon",
+	"Cobblestone",
+	"Asphalt",
+	"Rock",
+	"Glacier",
+	"Snow",
+	"Sandstone",
+	"Mud",
+	"Basalt",
+	"Ground",
+	"CrackedLava",
+	"LeafyGrass",
+	"Salt",
+	"Limestone",
+	"Pavement",
+}
+
 local SCHEMAS: { [string]: { PropDef } } = {
 	Instance = INSTANCE_PROPS,
 	Folder = INSTANCE_PROPS,
 	Configuration = INSTANCE_PROPS,
 	Part = props({
 		{ name = "Name", valueType = "string", default = "Part", category = "Data" },
-		{ name = "Anchored", valueType = "boolean", default = false, category = "Data" },
-		{ name = "CanCollide", valueType = "boolean", default = true, category = "Data" },
-		{ name = "CanQuery", valueType = "boolean", default = true, category = "Data" },
-		{ name = "CanTouch", valueType = "boolean", default = true, category = "Data" },
-		{ name = "CastShadow", valueType = "boolean", default = true, category = "Data" },
-		{ name = "Transparency", valueType = "number", default = 0, category = "Appearance" },
-		{ name = "Reflectance", valueType = "number", default = 0, category = "Appearance" },
-		{ name = "Color", valueType = "Color3", default = Color3.fromRGB(163, 162, 165), category = "Appearance" },
-		{ name = "Size", valueType = "Vector3", default = Vector3.new(4, 1, 2), category = "Transform" },
-		{ name = "Position", valueType = "Vector3", default = Vector3.zero, category = "Transform", readonly = true },
-		{ name = "Material", valueType = "string", default = "Plastic", category = "Appearance" },
-		{ name = "Shape", valueType = "string", default = "Block", category = "Part" },
-	}),
-	MeshPart = props({
-		{ name = "Name", valueType = "string", default = "MeshPart", category = "Data" },
-		{ name = "Anchored", valueType = "boolean", default = false, category = "Data" },
-		{ name = "CanCollide", valueType = "boolean", default = true, category = "Data" },
+		{ name = "Anchored", valueType = "boolean", default = false, category = "Behavior" },
+		{ name = "CanCollide", valueType = "boolean", default = true, category = "Behavior" },
 		{ name = "Transparency", valueType = "number", default = 0, category = "Appearance" },
 		{ name = "Color", valueType = "Color3", default = Color3.fromRGB(163, 162, 165), category = "Appearance" },
+		{ name = "Material", valueType = "enum", default = "Plastic", category = "Appearance", enumItems = MATERIALS },
 		{ name = "Size", valueType = "Vector3", default = Vector3.new(4, 1, 2), category = "Transform" },
-	}),
-	Model = props({
-		{ name = "Name", valueType = "string", default = "Model", category = "Data" },
-		{ name = "PrimaryPart", valueType = "string", default = "", category = "Data", readonly = true },
+		{ name = "Position", valueType = "Vector3", default = Vector3.zero, category = "Transform" },
 	}),
 	Humanoid = props({
 		{ name = "Name", valueType = "string", default = "Humanoid", category = "Data" },
@@ -55,19 +76,11 @@ local SCHEMAS: { [string]: { PropDef } } = {
 		{ name = "MaxHealth", valueType = "number", default = 100, category = "Health" },
 		{ name = "WalkSpeed", valueType = "number", default = 16, category = "Control" },
 		{ name = "JumpPower", valueType = "number", default = 50, category = "Control" },
-		{ name = "JumpHeight", valueType = "number", default = 7.2, category = "Control" },
-		{ name = "HipHeight", valueType = "number", default = 0, category = "Control" },
-		{ name = "AutoRotate", valueType = "boolean", default = true, category = "Control" },
-		{ name = "DisplayDistanceType", valueType = "string", default = "Relative", category = "Display" },
-		{ name = "HealthDisplayType", valueType = "string", default = "DisplayWhenDamaged", category = "Display" },
-		{ name = "NameDisplayDistance", valueType = "number", default = 100, category = "Display" },
-		{ name = "HealthDisplayDistance", valueType = "number", default = 100, category = "Display" },
 		{ name = "DisplayName", valueType = "string", default = "", category = "Display" },
 	}),
 	Script = props({
 		{ name = "Name", valueType = "string", default = "Script", category = "Data" },
 		{ name = "Disabled", valueType = "boolean", default = false, category = "Data" },
-		{ name = "RunContext", valueType = "string", default = "Legacy", category = "Data" },
 	}),
 	LocalScript = props({
 		{ name = "Name", valueType = "string", default = "LocalScript", category = "Data" },
@@ -76,84 +89,210 @@ local SCHEMAS: { [string]: { PropDef } } = {
 	ModuleScript = props({
 		{ name = "Name", valueType = "string", default = "ModuleScript", category = "Data" },
 	}),
-	BillboardGui = props({
-		{ name = "Name", valueType = "string", default = "BillboardGui", category = "Data" },
-		{ name = "AlwaysOnTop", valueType = "boolean", default = false, category = "Data" },
-		{ name = "Enabled", valueType = "boolean", default = true, category = "Data" },
-		{ name = "Size", valueType = "string", default = "{0, 200},{0, 50}", category = "Data" },
-		{ name = "StudsOffset", valueType = "Vector3", default = Vector3.new(0, 3, 0), category = "Data" },
-	}),
-	StringValue = props({
-		{ name = "Name", valueType = "string", default = "Value", category = "Data" },
-		{ name = "Value", valueType = "string", default = "", category = "Data" },
-	}),
-	BoolValue = props({
-		{ name = "Name", valueType = "string", default = "Value", category = "Data" },
-		{ name = "Value", valueType = "boolean", default = false, category = "Data" },
-	}),
-	NumberValue = props({
-		{ name = "Name", valueType = "string", default = "Value", category = "Data" },
-		{ name = "Value", valueType = "number", default = 0, category = "Data" },
-	}),
-	IntValue = props({
-		{ name = "Name", valueType = "string", default = "Value", category = "Data" },
-		{ name = "Value", valueType = "number", default = 0, category = "Data" },
-	}),
 }
 
-local INSERTABLE_CLASSES = {
-	"Folder",
-	"Part",
-	"MeshPart",
-	"Model",
-	"Humanoid",
-	"Script",
-	"LocalScript",
-	"ModuleScript",
-	"Configuration",
-	"StringValue",
-	"BoolValue",
-	"NumberValue",
-	"IntValue",
-	"ObjectValue",
-	"RemoteEvent",
-	"RemoteFunction",
-	"BindableEvent",
-	"BindableFunction",
-	"BillboardGui",
-	"SurfaceGui",
-	"Attachment",
-	"Highlight",
-	"ProximityPrompt",
-	"ClickDetector",
-	"Sound",
-	"Decal",
-	"Texture",
-	"PointLight",
-	"SpotLight",
-	"Fire",
-	"Smoke",
-	"Sparkles",
-	"ParticleEmitter",
-	"Beam",
-	"Trail",
-	"WeldConstraint",
-	"Motor6D",
-	"SpawnLocation",
-	"Seat",
-	"Tool",
-	"Camera",
-	"UICorner",
-	"UIListLayout",
-	"UIPadding",
-	"UIStroke",
-	"Frame",
-	"TextLabel",
-	"TextButton",
-	"TextBox",
-	"ImageLabel",
-	"ImageButton",
-	"ScrollingFrame",
+export type InsertSection = {
+	title: string,
+	classes: { string },
+}
+
+local INSERT_SECTIONS: { InsertSection } = {
+	{
+		title = "Structure",
+		classes = {
+			"Folder",
+			"Model",
+			"Configuration",
+			"WorldModel",
+			"Actor",
+			"Camera",
+			"TerrainRegion",
+		},
+	},
+	{
+		title = "Parts",
+		classes = {
+			"Part",
+			"MeshPart",
+			"WedgePart",
+			"CornerWedgePart",
+			"TrussPart",
+			"SpawnLocation",
+			"Seat",
+			"VehicleSeat",
+			"NegateOperation",
+			"UnionOperation",
+			"IntersectOperation",
+		},
+	},
+	{
+		title = "Scripts",
+		classes = {
+			"Script",
+			"LocalScript",
+			"ModuleScript",
+		},
+	},
+	{
+		title = "Values",
+		classes = {
+			"StringValue",
+			"BoolValue",
+			"NumberValue",
+			"IntValue",
+			"ObjectValue",
+			"Vector3Value",
+			"CFrameValue",
+			"Color3Value",
+			"BrickColorValue",
+			"RayValue",
+		},
+	},
+	{
+		title = "Networking",
+		classes = {
+			"RemoteEvent",
+			"RemoteFunction",
+			"BindableEvent",
+			"BindableFunction",
+			"UnreliableRemoteEvent",
+		},
+	},
+	{
+		title = "UI",
+		classes = {
+			"ScreenGui",
+			"BillboardGui",
+			"SurfaceGui",
+			"Frame",
+			"ScrollingFrame",
+			"CanvasGroup",
+			"TextLabel",
+			"TextButton",
+			"TextBox",
+			"ImageLabel",
+			"ImageButton",
+			"ViewportFrame",
+			"VideoFrame",
+			"UICorner",
+			"UIPadding",
+			"UIListLayout",
+			"UIGridLayout",
+			"UITableLayout",
+			"UIPageLayout",
+			"UIAspectRatioConstraint",
+			"UISizeConstraint",
+			"UITextSizeConstraint",
+			"UIScale",
+			"UIStroke",
+			"UIGradient",
+			"UIFlexItem",
+		},
+	},
+	{
+		title = "Effects & Lights",
+		classes = {
+			"PointLight",
+			"SpotLight",
+			"SurfaceLight",
+			"Fire",
+			"Smoke",
+			"Sparkles",
+			"ParticleEmitter",
+			"Beam",
+			"Trail",
+			"Highlight",
+			"Decal",
+			"Texture",
+			"SurfaceAppearance",
+			"BloomEffect",
+			"BlurEffect",
+			"ColorCorrectionEffect",
+			"DepthOfFieldEffect",
+			"SunRaysEffect",
+			"Atmosphere",
+			"Sky",
+			"Clouds",
+		},
+	},
+	{
+		title = "Gameplay",
+		classes = {
+			"Humanoid",
+			"HumanoidDescription",
+			"Tool",
+			"ProximityPrompt",
+			"ClickDetector",
+			"DragDetector",
+			"Sound",
+			"SoundGroup",
+			"Attachment",
+			"Bone",
+			"Accessory",
+			"Hat",
+			"Shirt",
+			"Pants",
+			"ShirtGraphic",
+			"BodyColors",
+			"ForceField",
+			"Team",
+		},
+	},
+	{
+		title = "Animation",
+		classes = {
+			"Animation",
+			"AnimationController",
+			"Animator",
+			"KeyframeSequence",
+			"Keyframe",
+			"Pose",
+			"NumberPose",
+		},
+	},
+	{
+		title = "Constraints",
+		classes = {
+			"WeldConstraint",
+			"Weld",
+			"Snap",
+			"ManualWeld",
+			"Motor6D",
+			"Motor",
+			"RopeConstraint",
+			"RodConstraint",
+			"SpringConstraint",
+			"HingeConstraint",
+			"BallSocketConstraint",
+			"PrismaticConstraint",
+			"CylindricalConstraint",
+			"UniversalConstraint",
+			"PlaneConstraint",
+			"RigidConstraint",
+			"AlignPosition",
+			"AlignOrientation",
+			"VectorForce",
+			"LineForce",
+			"Torque",
+			"AngularVelocity",
+			"LinearVelocity",
+			"NoCollisionConstraint",
+		},
+	},
+	{
+		title = "Physics",
+		classes = {
+			"Attachment",
+			"Bone",
+			"PathfindingModifier",
+			"PathfindingLink",
+			"SpecialMesh",
+			"BlockMesh",
+			"CylinderMesh",
+			"FileMesh",
+			"CharacterMesh",
+		},
+	},
 }
 
 local EngineSchemas = {}
@@ -163,7 +302,21 @@ function EngineSchemas.get(className: string): { PropDef }
 end
 
 function EngineSchemas.insertable(): { string }
-	return INSERTABLE_CLASSES
+	local list = {}
+	local seen = {}
+	for _, section in INSERT_SECTIONS do
+		for _, className in section.classes do
+			if not seen[className] then
+				seen[className] = true
+				table.insert(list, className)
+			end
+		end
+	end
+	return list
+end
+
+function EngineSchemas.insertSections(): { InsertSection }
+	return INSERT_SECTIONS
 end
 
 function EngineSchemas.has(className: string): boolean
@@ -177,6 +330,10 @@ function EngineSchemas.baseClasses(): { string }
 	end
 	table.sort(list)
 	return list
+end
+
+function EngineSchemas.materials(): { string }
+	return MATERIALS
 end
 
 return EngineSchemas
