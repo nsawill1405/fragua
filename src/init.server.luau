@@ -46,6 +46,7 @@ propertiesWidget.Title = "Fragua Properties"
 propertiesWidget.Name = "FraguaProperties"
 
 Registry.seedDefaults()
+local behaviorSync = Registry.watchBehaviorTemplates()
 TypeCatalog.sync(Registry)
 local catalogConnection = Registry.Changed:Connect(function()
 	TypeCatalog.sync(Registry)
@@ -90,6 +91,7 @@ end)
 
 plugin.Unloading:Connect(function()
 	scriptInjector.destroy()
+	behaviorSync.destroy()
 	catalogConnection:Disconnect()
 	if explorerApi and explorerApi.destroy then
 		explorerApi.destroy()

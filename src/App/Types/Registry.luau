@@ -578,4 +578,55 @@ function Registry.setSharedBehaviorSource(typeId: string, source: string)
 	end
 end
 
+function Registry.watchBehaviorTemplates()
+	local connections: { RBXScriptConnection } = {}
+	local watched = setmetatable({}, { __mode = "k" })
+	local stopped = false
+
+	local function watch(template: Instance)
+		if stopped or watched[template] or not template:IsA("ModuleScript") then
+			return
+		end
+		if template:GetAttribute("_FraguaSharedBehavior") ~= true then
+			return
+		end
+		local typeId = template.Name:gsub("Behavior$", "")
+		watched[template] = true
+		table.insert(
+			connections,
+			template:GetPropertyChangedSignal("Source"):Connect(function()
+				task.defer(function()
+					if stopped or not template.Parent then
+						return
+					end
+					Registry.syncBehaviorToInstances(typeId)
+					local ok, Host = pcall(function()
+						return require(script.Parent.Parent.Behaviors.Host)
+					end)
+					if ok and Host and Host.invalidateType then
+						Host.invalidateType(typeId)
+					end
+					fireChanged()
+				end)
+			end)
+		)
+	end
+
+	local folder = Registry.typesFolder()
+	for _, child in folder:GetChildren() do
+		watch(child)
+	end
+	table.insert(connections, folder.ChildAdded:Connect(watch))
+
+	return {
+		destroy = function()
+			stopped = true
+			for _, connection in connections do
+				connection:Disconnect()
+			end
+			table.clear(connections)
+		end,
+	}
+end
+
 return Registry
