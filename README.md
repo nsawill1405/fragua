@@ -16,8 +16,8 @@
 - Type inheritance with visible read-only inherited properties and direct overrides
 - Searchable categorized icon picker with 160+ Studio-style icons
 - Edit-time **Behavior** hooks (`onCreated`, `onSelected`, `onPropertyChanged`, `onAncestryChanged`)
-- Scrollable docked **Script Editor** with tabs, syntax coloring, dirty/conflict state, search, and diagnostics
-- Type-aware suggestions for Luau/Roblox symbols, behavior hooks, custom types, inherited properties, and literal attribute types
+- Automatic Fragua imports in every Script, LocalScript, and ModuleScript while editing in Roblox's native editor
+- Runtime `Instance` and `Enum` compatibility proxies for creating and enumerating custom types
 - Modern compact controls, transactional sliders, smoother hex/RGB color input, animated booleans, and optional interface animations
 - Sample **Zombie** type with a Studio nameplate
 
@@ -46,7 +46,6 @@ After install you should see a **Fragua** toolbar:
 |--------|--------|
 | Explorer | Toggle Fragua Explorer |
 | Properties | Toggle Fragua Properties |
-| Script Editor | Toggle the custom Fragua code editor |
 
 ## Custom types
 
@@ -86,7 +85,7 @@ Insert Object → **Delete Type…**. This removes the definition from `ServerSt
 
 ### Behavior hooks
 
-Select a custom instance and choose **Edit behavior** in Fragua Properties. Fragua opens the shared type behavior in its custom editor, where autocomplete understands the type's schema and hooks. The editor never opens merely because selection changed. To edit a normal Script, LocalScript, or ModuleScript, select it and choose **Open selected** in the Script Editor dock.
+Select a custom instance and choose **Edit behavior** in Fragua Properties. Fragua opens the shared type behavior in Roblox Studio's native script editor.
 
 Behavior modules use this shape:
 
@@ -103,6 +102,20 @@ return Behavior
 
 The plugin runs these in **Edit** mode. The seeded **Zombie** type adds a green nameplate BillboardGui (Humanoid-style feedback).
 
+### Runtime creation
+
+Fragua adds a managed import header to every place script. Normal Roblox classes and enums continue to work through the aliases, while Fragua type IDs are accepted by the same factory:
+
+```luau
+local part = Instance.new("Part")
+part.Material = Enum.Material.Neon
+
+local zombie = Instance.new("Zombie", workspace)
+local anotherZombie = Instance.new(Enum.FraguaType.Zombie, workspace)
+```
+
+The original gateway remains available through `Fragua.Get`, `Fragua.IsA`, `Fragua.GetProperty`, and `Fragua.SetProperty`.
+
 ## Project layout
 
 ```
@@ -114,7 +127,7 @@ fragua/
     App/
       Explorer/               # tree + Insert Object picker
       Properties/             # property grid
-      ScriptEditor/           # docked editor, autocomplete, diagnostics
+      Runtime/                # injected imports, runtime gateway, type catalogue
       Settings/               # persisted UI preferences
       Types/                  # registry, schemas, icon picker, type editor
       Behaviors/              # edit-time behavior host
@@ -125,8 +138,8 @@ fragua/
 ## Limits
 
 - Not full Studio Explorer / Properties parity
-- The custom editor intentionally provides lightweight completion and diagnostics rather than the full native Studio language server
-- Custom types are Fragua-surface only; gameplay should read attributes / your own runtime loader
+- Custom type enum items are Fragua proxy values, not native Roblox `EnumItem` userdata
+- Custom instances remain tagged `Configuration` objects rather than real engine ClassNames
 - Deleting a type does not bulk-delete placed instances
 
 ## License
