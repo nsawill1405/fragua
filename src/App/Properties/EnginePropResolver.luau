@@ -1,6 +1,6 @@
 local EnginePropResolver = {}
 
-function EnginePropResolver.resolve(className: string, isA, exact, families)
+function EnginePropResolver.resolve(className: string, isA, exact, families, baseline)
 	local rows = {}
 	local indexes = {}
 
@@ -16,6 +16,7 @@ function EnginePropResolver.resolve(className: string, isA, exact, families)
 		end
 	end
 
+	merge(baseline)
 	merge(exact.Instance)
 	for _, family in families or {} do
 		if isA(family.className) then

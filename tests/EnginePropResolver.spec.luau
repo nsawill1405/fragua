@@ -27,4 +27,21 @@ return {
 		})
 		assert(#rows == 1 and rows[1].category == "Spawn")
 	end,
+	["baseline probe rows are retained for curated subclasses"] = function()
+		local rows = Resolver.resolve("TextButton", function(name)
+			return name == "GuiObject"
+		end, {
+			Instance = { { name = "Archivable", category = "Data" } },
+			TextButton = { { name = "Text", category = "Text" } },
+		}, {
+			{ className = "GuiObject", properties = { { name = "Visible", category = "Data" } } },
+		}, {
+			{ name = "BackgroundTransparency", category = "Appearance" },
+		})
+		local found = {}
+		for _, row in rows do
+			found[row.name] = true
+		end
+		assert(found.Archivable and found.BackgroundTransparency and found.Visible and found.Text)
+	end,
 }
