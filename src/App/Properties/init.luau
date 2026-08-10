@@ -403,6 +403,9 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			table.clear(attributeUpdaters)
 			local list = Selection:Get()
 			current = list[1]
+			if current and not current:IsDescendantOf(game) then
+				current = nil
+			end
 			if not current then
 				title.Text = "No selection"
 				iconHolder:SetAttribute("IconId", "class_Folder")
@@ -708,6 +711,13 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 	return {
 		root = root,
 		rebuild = rebuild,
+		refreshForRunState = function()
+			clearConns()
+			if current and not current:IsDescendantOf(game) then
+				current = nil
+			end
+			task.defer(rebuild)
+		end,
 		destroy = function()
 			clearConns()
 			for _, c in lifetime do
