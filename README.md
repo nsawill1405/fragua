@@ -13,12 +13,12 @@
   - Your custom types (with icons)
   - **Create New Type…**
   - **Delete Type…**
-- Type inheritance (`extends` Humanoid or another Fragua type)
-- Icon picker (bundled catalog)
+- Type inheritance with visible read-only inherited properties and direct overrides
+- Searchable categorized icon picker with 160+ Studio-style icons
 - Edit-time **Behavior** hooks (`onCreated`, `onSelected`, `onPropertyChanged`, `onAncestryChanged`)
-- Docked **Script Editor** with tabs, dirty/conflict state, search, diagnostics, and lightweight autocomplete
-- Schema-aware suggestions for Luau keywords, behavior hooks, custom types, and custom properties
-- Modern compact controls, reliable pointer capture, hex/RGB color input, and optional interface animations
+- Scrollable docked **Script Editor** with tabs, syntax coloring, dirty/conflict state, search, and diagnostics
+- Type-aware suggestions for Luau/Roblox symbols, behavior hooks, custom types, inherited properties, and literal attribute types
+- Modern compact controls, transactional sliders, smoother hex/RGB color input, animated booleans, and optional interface animations
 - Sample **Zombie** type with a Studio nameplate
 
 ## Install (development)
@@ -63,11 +63,11 @@ ServerStorage
 ### Create a type
 
 1. Open **Fragua Explorer**
-2. Select a parent (e.g. a Model in Workspace)
+2. Optionally select a parent (e.g. a Model in Workspace)
 3. Click **+** (or right-click a row → Insert Object)
 4. Choose **Create New Type…**
 5. Set name, `extends`, properties, and icon
-6. The type appears under the **Custom** section of Insert Object
+6. Choose **Create & insert**. Fragua saves the definition and inserts its first instance under the selected parent, or under `Workspace` when nothing valid is selected.
 
 ### Place a type
 
@@ -86,7 +86,7 @@ Insert Object → **Delete Type…**. This removes the definition from `ServerSt
 
 ### Behavior hooks
 
-Select a custom instance and choose **Edit behavior** in Fragua Properties. Fragua opens the shared type behavior in its custom editor, where autocomplete understands the type's schema and hooks. You can also select a normal Script, LocalScript, or ModuleScript and open it from the Script Editor dock.
+Select a custom instance and choose **Edit behavior** in Fragua Properties. Fragua opens the shared type behavior in its custom editor, where autocomplete understands the type's schema and hooks. The editor never opens merely because selection changed. To edit a normal Script, LocalScript, or ModuleScript, select it and choose **Open selected** in the Script Editor dock.
 
 Behavior modules use this shape:
 
