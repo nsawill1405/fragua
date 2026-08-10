@@ -132,6 +132,8 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 
 	local state = DocumentStore.new()
 	local targets = {}
+	local targetConnections = {}
+	local savingDocuments = {}
 	local currentDiagnostics = {}
 	local loadingDocument = false
 	local canvas
@@ -180,6 +182,15 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 		return `Ln {line}, Col {column}`
 	end
 
+	local function diagnosticsStatus(source: string, cursor: number, issues): string
+		local base = `  Luau  /  {cursorStatus(source, cursor)}  /  {#issues} issue(s)`
+		local first = issues[1]
+		if not first then
+			return base
+		end
+		return `{base}  /  {string.upper(first.severity or "issue")} {cursorStatus(source, first.startByte or 1)}: {first.message}`
+	end
+
 	local rebuildTabs: () -> ()
 	local loadActive: () -> ()
 
@@ -199,7 +210,7 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 			currentDiagnostics = issues
 			local document = activeDocument()
 			if document then
-				status.Text = `  Luau  /  {cursorStatus(document.source, document.cursor)}  /  {#issues} issue(s)`
+				status.Text = diagnosticsStatus(document.source, document.cursor, issues)
 			end
 		end,
 	})
@@ -266,6 +277,25 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 			sharedCount = sharedCount,
 		})
 		targets[id] = target
+		if not targetConnections[id] then
+			targetConnections[id] = target:GetPropertyChangedSignal("Source"):Connect(function()
+				if savingDocuments[id] then
+					return
+				end
+				local document = state.documents[id]
+				if not document then
+					return
+				end
+				DocumentStore.markExternalChange(state, id, target.Source)
+				if state.activeId == id then
+					if document.conflicted then
+						status.Text = "  External change conflict  /  Local edits preserved"
+					else
+						loadActive()
+					end
+				end
+			end)
+		end
 		widget.Enabled = true
 		loadActive()
 		canvas.focus()
@@ -286,6 +316,7 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 			return
 		end
 		ChangeHistoryService:SetWaypoint("Fragua Script Save")
+		savingDocuments[id] = true
 		local ok, err = pcall(function()
 			if document.typeId then
 				Registry.setSharedBehaviorSource(document.typeId, document.source)
@@ -295,6 +326,7 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 				end)
 			end
 		end)
+		savingDocuments[id] = nil
 		if ok then
 			DocumentStore.markSaved(state, id)
 			status.Text = "  Luau  /  Saved"
@@ -365,6 +397,9 @@ function ScriptEditor.mount(widget: DockWidgetPluginGui)
 		end,
 		destroy = function()
 			for _, connection in connections do
+				connection:Disconnect()
+			end
+			for _, connection in targetConnections do
 				connection:Disconnect()
 			end
 			canvas.destroy()

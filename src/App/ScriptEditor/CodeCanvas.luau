@@ -206,6 +206,10 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		end
 		selectedIndex = math.clamp(selectedIndex, 1, #suggestions)
 		local visibleCount = math.min(#suggestions, 7)
+		local windowStart = math.clamp(selectedIndex - 6, 1, math.max(1, #suggestions - visibleCount + 1))
+		if selectedIndex < windowStart then
+			windowStart = selectedIndex
+		end
 		popup.Size = UDim2.fromOffset(math.min(300, math.max(200, root.AbsoluteSize.X - 16)), visibleCount * 34)
 		local caret = EditorLayout.caretPoint(editor.Text, math.max(editor.CursorPosition, 1), metrics)
 		local popupPoint = EditorLayout.popupPoint(
@@ -220,7 +224,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		popup.Position = UDim2.fromOffset(popupPoint.x, popupPoint.y)
 		popup.Visible = true
 
-		for index = 1, visibleCount do
+		for index = windowStart, math.min(#suggestions, windowStart + visibleCount - 1) do
 			local item = suggestions[index]
 			local row = Instance.new("TextButton")
 			row.AutoButtonColor = false
@@ -233,7 +237,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 			row.TextXAlignment = Enum.TextXAlignment.Left
 			row.Text = `  {item.label}    {item.detail or ""}`
 			row.TextTruncate = Enum.TextTruncate.AtEnd
-			row.LayoutOrder = index
+			row.LayoutOrder = index - windowStart + 1
 			row.ZIndex = 21
 			row.Parent = popup
 			row.MouseButton1Click:Connect(function()
@@ -305,7 +309,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		end
 		if popup.Visible then
 			if input.KeyCode == Enum.KeyCode.Down then
-				selectedIndex = math.min(selectedIndex + 1, math.min(#suggestions, 7))
+				selectedIndex = math.min(selectedIndex + 1, #suggestions)
 				renderPopup()
 			elseif input.KeyCode == Enum.KeyCode.Up then
 				selectedIndex = math.max(selectedIndex - 1, 1)

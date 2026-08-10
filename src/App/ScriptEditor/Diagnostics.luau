@@ -56,12 +56,93 @@ local function parameterCount(parameters: string): number
 	return count
 end
 
+local function literalType(text: string): string?
+	local trimmed = text:match("^%s*(.-)%s*$") or text
+	if trimmed:match('^".*"$') or trimmed:match("^'.*'$") then
+		return "string"
+	elseif tonumber(trimmed) ~= nil then
+		return "number"
+	elseif trimmed == "true" or trimmed == "false" then
+		return "boolean"
+	elseif trimmed:match("^Color3%.[%w_]+%s*%(") or trimmed:match("^Color3%s*%(") then
+		return "Color3"
+	elseif trimmed:match("^Vector3%.[%w_]+%s*%(") or trimmed:match("^Vector3%s*%(") then
+		return "Vector3"
+	end
+	return nil
+end
+
 function Diagnostics.analyze(source: string, context)
 	local issues = {}
 	local schemaNames = {}
+	local schemaTypes = {}
 	local searchFrom = 1
 	for _, property in context.schema or {} do
 		schemaNames[property.name] = true
+		schemaTypes[property.name] = property.valueType
+	end
+
+	local knownTypes = {}
+	for _, typeId in context.typeIds or {} do
+		knownTypes[typeId] = true
+	end
+	while true do
+		local startByte, endByte, typeId = source:find("Fragua%.create%s*%(%s*[%\"']([^%\"']+)[%\"']", searchFrom)
+		if not startByte then
+			break
+		end
+		if not knownTypes[typeId] then
+			table.insert(issues, {
+				severity = "error",
+				code = "unknown-type",
+				message = `Unknown Fragua type "{typeId}".`,
+				startByte = startByte,
+				endByte = endByte + 1,
+			})
+		end
+		searchFrom = endByte + 1
+	end
+
+	searchFrom = 1
+	while true do
+		local startByte, endByte, propertyName, literal =
+			source:find("SetAttribute%s*%(%s*[%\"']([^%\"']+)[%\"']%s*,%s*([^%)]+)%)", searchFrom)
+		if not startByte then
+			break
+		end
+		local actual = literalType(literal)
+		local expected = schemaTypes[propertyName]
+		if actual and expected and actual ~= expected then
+			table.insert(issues, {
+				severity = "error",
+				code = "attribute-type-mismatch",
+				message = `"{propertyName}" expects {expected}, got {actual}.`,
+				startByte = startByte,
+				endByte = endByte + 1,
+			})
+		end
+		searchFrom = endByte + 1
+	end
+
+	local localDeclarations = {}
+	searchFrom = 1
+	while true do
+		local startByte, endByte, localName = source:find("local%s+([%a_][%w_]*)", searchFrom)
+		if not startByte then
+			break
+		end
+		if localDeclarations[localName] then
+			table.insert(issues, {
+				severity = "warning",
+				code = "duplicate-local",
+				message = `Local "{localName}" is declared more than once.`,
+				startByte = startByte,
+				endByte = endByte + 1,
+			})
+		else
+			localDeclarations[localName] = true
+		end
+		searchFrom = endByte + 1
 	end
 
 	if next(schemaNames) ~= nil then
