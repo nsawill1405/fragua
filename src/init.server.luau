@@ -6,12 +6,14 @@ local Properties = require(script.App.Properties)
 local ScriptEditor = require(script.App.ScriptEditor)
 local SettingsStore = require(script.App.Settings.Store)
 local EnsurePlaceModules = require(script.App.Runtime.EnsurePlaceModules)
+local ScriptInjector = require(script.App.Runtime.ScriptInjector)
 local Host = require(script.App.Behaviors.Host)
 local Registry = require(script.App.Types.Registry)
 local Constants = require(script.App.Shared.Constants)
 
 SettingsStore.bind(plugin)
 EnsurePlaceModules.sync()
+local scriptInjector = ScriptInjector.start()
 
 local toolbar = plugin:CreateToolbar(Constants.PLUGIN_NAME)
 
@@ -101,6 +103,7 @@ Selection.SelectionChanged:Connect(function()
 end)
 
 plugin.Unloading:Connect(function()
+	scriptInjector.destroy()
 	if explorerApi and explorerApi.destroy then
 		explorerApi.destroy()
 	end
