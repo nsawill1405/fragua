@@ -10,4 +10,5 @@ TestRunner.run({
 	ColorText = require("./ColorText.spec"),
 	EditorLayout = require("./EditorLayout.spec"),
 	SyntaxHighlighter = require("./SyntaxHighlighter.spec"),
+	PreviewCommit = require("./PreviewCommit.spec"),
 })
