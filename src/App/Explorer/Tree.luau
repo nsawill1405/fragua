@@ -1242,7 +1242,6 @@ function Tree.mount(
 			hoveredInstance = nil
 			dropTarget = nil
 			selectionAnchor = nil
-			scheduleRebuild()
 		end,
 		reveal = function(inst: Instance)
 			local current: Instance? = inst.Parent

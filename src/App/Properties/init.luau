@@ -1,4 +1,5 @@
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
+local CollectionService = game:GetService("CollectionService")
 local Selection = game:GetService("Selection")
 
 local Theme = require(script.Parent.Shared.Theme)
@@ -124,6 +125,14 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 	local function clearRows()
 		for _, child in scroll:GetChildren() do
 			if child:IsA("GuiObject") and not child:IsA("UIListLayout") then
+				child:Destroy()
+			end
+		end
+	end
+
+	local function closeMetadataDialogs()
+		for _, child in root:GetChildren() do
+			if child.Name == "MetadataDialog" then
 				child:Destroy()
 			end
 		end
@@ -656,14 +665,32 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					end
 				end)
 			)
-			pcall(function()
-				table.insert(
-					conns,
-					selected:GetPropertyChangedSignal("Tags"):Connect(function()
+			local watchedTags = {}
+			local function watchTag(tag: string)
+				if watchedTags[tag] then
+					return
+				end
+				watchedTags[tag] = true
+				local function changed(instance: Instance)
+					if instance == selected and current == selected then
 						task.defer(rebuild)
-					end)
-				)
-			end)
+					end
+				end
+				table.insert(conns, CollectionService:GetInstanceAddedSignal(tag):Connect(changed))
+				table.insert(conns, CollectionService:GetInstanceRemovedSignal(tag):Connect(changed))
+			end
+			for _, tag in CollectionService:GetAllTags() do
+				watchTag(tag)
+			end
+			table.insert(conns, CollectionService.TagAdded:Connect(watchTag))
+			table.insert(
+				conns,
+				CollectionService.TagRemoved:Connect(function()
+					if current == selected then
+						task.defer(rebuild)
+					end
+				end)
+			)
 			table.insert(
 				conns,
 				selected.AttributeChanged:Connect(function(attributeName)
@@ -704,6 +731,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 	table.insert(
 		lifetime,
 		Selection.SelectionChanged:Connect(function()
+			closeMetadataDialogs()
 			task.defer(rebuild)
 		end)
 	)
@@ -719,11 +747,11 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		root = root,
 		rebuild = rebuild,
 		refreshForRunState = function()
+			closeMetadataDialogs()
 			clearConns()
 			if current and not current:IsDescendantOf(game) then
 				current = nil
 			end
-			task.defer(rebuild)
 		end,
 		destroy = function()
 			clearConns()

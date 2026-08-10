@@ -30,4 +30,18 @@ return {
 		assert(typeof(MetadataModel.defaultFor("Color3", constructors)) == "Color3")
 		assert(typeof(MetadataModel.defaultFor("Vector3", constructors)) == "Vector3")
 	end,
+	["unsupported Roblox attribute types are never parsed as strings"] = function()
+		assert(ok and MetadataModel, "MetadataModel should be available")
+		assert(MetadataModel.isSupportedType, "isSupportedType should be available")
+		assert(MetadataModel.isSupportedType("Vector3"))
+		assert(not MetadataModel.isSupportedType("CFrame"))
+		assert(not MetadataModel.isSupportedType("UDim2"))
+	end,
+	["modal dropdown layers render above the overlay"] = function()
+		assert(ok and MetadataModel, "MetadataModel should be available")
+		assert(MetadataModel.modalLayers, "modalLayers should be available")
+		local layers = MetadataModel.modalLayers(150)
+		assert(layers.panel > layers.overlay)
+		assert(layers.menu > layers.panel)
+	end,
 }

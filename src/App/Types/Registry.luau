@@ -510,15 +510,21 @@ end
 
 local function ensureBehaviorBackups(): Folder
 	local root = Registry.ensureRoot()
-	local existing = root:FindFirstChild("BehaviorBackups")
-	if existing and existing:IsA("Folder") then
-		return existing
+	local conventional = root:FindFirstChild("BehaviorBackups")
+	if conventional and conventional:IsA("Folder") then
+		conventional:SetAttribute("_FraguaBehaviorBackups", true)
+		return conventional
 	end
-	if existing then
-		existing:Destroy()
+	local existingNames = {}
+	for _, child in root:GetChildren() do
+		existingNames[child.Name] = child.ClassName
+		if child:IsA("Folder") and child:GetAttribute("_FraguaBehaviorBackups") == true then
+			return child
+		end
 	end
 	local folder = Instance.new("Folder")
-	folder.Name = "BehaviorBackups"
+	folder.Name = BehaviorTemplatePolicy.backupFolderName(existingNames)
+	folder:SetAttribute("_FraguaBehaviorBackups", true)
 	folder.Parent = root
 	return folder
 end
