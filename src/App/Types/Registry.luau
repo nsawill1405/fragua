@@ -123,11 +123,24 @@ function Registry.list(): { TypeDef }
 	local types: { TypeDef } = {}
 	for _, child in folder:GetChildren() do
 		if child:IsA("ModuleScript") or child:IsA("StringValue") then
-			local raw = if child:IsA("StringValue") then child.Value else child.Source
-			-- ModuleScripts store return JSON string source for simplicity
-			if child:IsA("ModuleScript") then
-				local matched = string.match(child.Source, "%[%[(.-)%]%]")
-				raw = matched or child.Source
+			local raw: string
+			if child:IsA("StringValue") then
+				raw = child.Value
+			else
+				-- Prefer requiring the module (returns JSON string); fall back to source scrape.
+				local ok, result = pcall(require, child)
+				if ok and typeof(result) == "string" then
+					raw = result
+				else
+					local source = child.Source
+					local startPos = string.find(source, "[[", 1, true)
+					local endPos = startPos and string.find(source, "]]", startPos + 2, true)
+					if startPos and endPos then
+						raw = string.sub(source, startPos + 2, endPos - 1)
+					else
+						raw = source
+					end
+				end
 			end
 			local def = decodeType(raw)
 			if def then
