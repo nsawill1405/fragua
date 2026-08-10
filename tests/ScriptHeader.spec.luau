@@ -24,4 +24,11 @@ return {
 		assert(Header.shouldSkip("ServerScriptService.FraguaRuntime"))
 		assert(not Header.shouldSkip("ServerScriptService.Gameplay"))
 	end,
+	["keeps Luau mode directives on the first line"] = function()
+		assert(ok and Header, "ScriptHeader should be available")
+		local result = Header.apply("--!strict\nlocal value = 1\n")
+		local directive = "--!strict\n"
+		assert(result:sub(1, #directive) == directive)
+		assert(result:find("-- Fragua imports begin", #directive + 1, true) == #directive + 1)
+	end,
 }
