@@ -557,21 +557,28 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			accent.ZIndex = 64
 			accent.Parent = section
 
+			local sectionContent = Instance.new("Frame")
+			sectionContent.Name = "Content"
+			sectionContent.BackgroundTransparency = 1
+			sectionContent.Position = UDim2.fromOffset(10, 0)
+			sectionContent.Size = UDim2.new(1, -16, 0, 40)
+			sectionContent.ZIndex = 64
+			sectionContent.Parent = section
+
 			local sectionList = Instance.new("UIListLayout")
 			sectionList.Padding = UDim.new(0, 4)
 			sectionList.SortOrder = Enum.SortOrder.LayoutOrder
-			sectionList.Parent = section
+			sectionList.Parent = sectionContent
 			local sectionPad = Instance.new("UIPadding")
 			sectionPad.PaddingTop = UDim.new(0, 4)
 			sectionPad.PaddingBottom = UDim.new(0, 4)
-			sectionPad.PaddingLeft = UDim.new(0, 10)
-			sectionPad.PaddingRight = UDim.new(0, 6)
-			sectionPad.Parent = section
+			sectionPad.Parent = sectionContent
 
 			local function resizeSection()
-				local height = math.max(40, sectionList.AbsoluteContentSize.Y + 8)
-				section.Size = UDim2.new(1, 0, 0, height)
-				accent.Size = UDim2.fromOffset(3, math.max(18, height - 6))
+				local geometry = TypeEditorLayout.sectionGeometry(sectionList.AbsoluteContentSize.Y)
+				section.Size = UDim2.new(1, 0, 0, geometry.height)
+				sectionContent.Size = UDim2.new(1, -16, 0, geometry.contentHeight)
+				accent.Size = UDim2.fromOffset(3, geometry.accentHeight)
 			end
 			sectionList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resizeSection)
 			task.defer(resizeSection)
@@ -581,7 +588,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			header.Size = UDim2.new(1, 0, 0, 24)
 			header.LayoutOrder = 0
 			header.ZIndex = 64
-			header.Parent = section
+			header.Parent = sectionContent
 
 			local catBox = Instance.new("TextBox")
 			catBox.ClearTextOnFocus = false
@@ -676,7 +683,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 				row.Size = UDim2.new(1, 0, 0, 24)
 				row.LayoutOrder = pi
 				row.ZIndex = 64
-				row.Parent = section
+				row.Parent = sectionContent
 
 				local nameField = Instance.new("TextBox")
 				nameField.ClearTextOnFocus = false
