@@ -14,6 +14,7 @@ TestRunner.run({
 	EnginePropResolver = require("./EnginePropResolver.spec"),
 	LifecycleGate = require("./LifecycleGate.spec"),
 	MetadataModel = require("./MetadataModel.spec"),
+	BehaviorTemplatePolicy = require("./BehaviorTemplatePolicy.spec"),
 	ScriptHeader = require("./ScriptHeader.spec"),
 	TypeCatalog = require("./TypeCatalog.spec"),
 	ApiSource = require("./ApiSource.spec"),
