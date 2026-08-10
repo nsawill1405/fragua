@@ -28,4 +28,13 @@ function TypeEditorLayout.geometry(hostWidth: number, hostHeight: number)
 	}
 end
 
+function TypeEditorLayout.sectionGeometry(editableContentHeight: number)
+	local height = math.max(40, editableContentHeight + 8)
+	return {
+		height = height,
+		contentHeight = height,
+		accentHeight = math.max(18, height - 6),
+	}
+end
+
 return TypeEditorLayout

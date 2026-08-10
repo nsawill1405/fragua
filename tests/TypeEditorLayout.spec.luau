@@ -27,4 +27,13 @@ return {
 		local geometry = Layout.geometry(900, 800)
 		assert(geometry.panel.width == 520 and geometry.panel.height == 620)
 	end,
+	["property section decoration cannot increase its own layout height"] = function()
+		assert(Layout.sectionGeometry, "sectionGeometry should be available")
+		local geometry = Layout.sectionGeometry(84)
+		assert(geometry.height == 92, `expected 92, got {geometry.height}`)
+		assert(geometry.contentHeight == 92)
+		assert(geometry.accentHeight == 86)
+		local repeated = Layout.sectionGeometry(84)
+		assert(repeated.height == geometry.height)
+	end,
 }
