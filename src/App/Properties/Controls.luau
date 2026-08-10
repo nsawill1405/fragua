@@ -1,5 +1,8 @@
 local Theme = require(script.Parent.Parent.Shared.Theme)
 local UiUtil = require(script.Parent.Parent.Shared.UiUtil)
+local PointerController = require(script.Parent.Parent.Shared.PointerController)
+local InteractionMath = require(script.Parent.Parent.Shared.InteractionMath)
+local ColorText = require(script.Parent.Parent.Shared.ColorText)
 
 local Controls = {}
 
@@ -7,7 +10,8 @@ function Controls.enumDropdown(
 	parent: GuiObject,
 	items: { string },
 	current: string,
-	onPick: (string) -> ()
+	onPick: (string) -> (),
+	_enumType: string?
 ): TextButton
 	local btn = Instance.new("TextButton")
 	btn.AutoButtonColor = false
@@ -17,7 +21,7 @@ function Controls.enumDropdown(
 	btn.TextSize = 12
 	btn.TextColor3 = Theme.textBright
 	btn.TextXAlignment = Enum.TextXAlignment.Left
-	btn.Text = "  " .. current .. "  ▾"
+	btn.Text = "  " .. current .. "  v"
 	btn.Parent = parent
 
 	local corner = Instance.new("UICorner")
@@ -25,7 +29,7 @@ function Controls.enumDropdown(
 	corner.Parent = btn
 
 	local open = false
-	local menu: Frame? = nil
+	local menu: ScrollingFrame? = nil
 
 	local function close()
 		open = false
@@ -42,7 +46,7 @@ function Controls.enumDropdown(
 		end
 		open = true
 
-		local host = parent:FindFirstAncestorWhichIsA("PluginGui") or parent:FindFirstAncestorOfClass("Frame") or parent
+		local host = UiUtil.dockHost(parent)
 		local drop = Instance.new("ScrollingFrame")
 		drop.Name = "EnumMenu"
 		drop.BackgroundColor3 = Theme.bgRaised
@@ -52,11 +56,6 @@ function Controls.enumDropdown(
 		drop.AutomaticCanvasSize = Enum.AutomaticSize.Y
 		drop.CanvasSize = UDim2.new()
 		drop.Parent = host
-
-		local abs = btn.AbsolutePosition
-		local rootAbs = (host :: GuiObject).AbsolutePosition
-		drop.Position = UDim2.fromOffset(abs.X - rootAbs.X, abs.Y - rootAbs.Y + btn.AbsoluteSize.Y + 2)
-		drop.Size = UDim2.fromOffset(math.max(140, btn.AbsoluteSize.X), math.min(180, 24 * #items + 8))
 
 		local dc = Instance.new("UICorner")
 		dc.CornerRadius = UDim.new(0, 6)
@@ -78,6 +77,8 @@ function Controls.enumDropdown(
 		pad.PaddingLeft = UDim.new(0, 4)
 		pad.PaddingRight = UDim.new(0, 4)
 		pad.Parent = drop
+
+		UiUtil.placeDropdown(host, btn, drop, math.max(160, btn.AbsoluteSize.X), math.min(220, 24 * #items + 12))
 
 		for i, item in items do
 			local opt = Instance.new("TextButton")
@@ -108,13 +109,13 @@ function Controls.enumDropdown(
 				opt.BackgroundTransparency = if item == current then 0.3 else 1
 			end)
 			opt.MouseButton1Click:Connect(function()
-				btn.Text = "  " .. item .. "  ▾"
+				btn.Text = "  " .. item .. "  v"
 				close()
 				onPick(item)
 			end)
 		end
 
-		menu = drop :: any
+		menu = drop
 	end)
 
 	btn.AncestryChanged:Connect(function(_, parentNow)
@@ -126,11 +127,140 @@ function Controls.enumDropdown(
 	return btn
 end
 
-function Controls.colorField(
-	parent: GuiObject,
-	value: Color3,
-	onCommit: (Color3) -> ()
-): Frame
+function Controls.numberField(parent: GuiObject, value: number, onCommit: (number) -> (), range: { number }?): Frame
+	local minV = if range then range[1] else nil
+	local maxV = if range then range[2] else nil
+	if minV == nil or maxV == nil then
+		if value >= 0 and value <= 1 then
+			minV, maxV = 0, 1
+		else
+			local span = math.max(math.abs(value) * 2, 10)
+			minV, maxV = math.min(0, value - span * 0.25), math.max(value + span * 0.75, span)
+		end
+	end
+	if maxV <= minV then
+		maxV = minV + 1
+	end
+
+	local holder = Instance.new("Frame")
+	holder.BackgroundTransparency = 1
+	holder.BorderSizePixel = 0
+	holder.Size = UDim2.fromScale(1, 1)
+	holder.Parent = parent
+
+	local box = Instance.new("TextBox")
+	box.ClearTextOnFocus = false
+	box.BackgroundColor3 = Theme.inputBg
+	box.BorderSizePixel = 0
+	box.Size = UDim2.new(0.34, -2, 1, 0)
+	box.Position = UDim2.new(0.66, 2, 0, 0)
+	box.Font = Theme.fontMono
+	box.TextSize = 11
+	box.TextColor3 = Theme.textBright
+	box.TextXAlignment = Enum.TextXAlignment.Left
+	box.Text = string.format(" %.3g", value)
+	box.Parent = holder
+	local bc = Instance.new("UICorner")
+	bc.CornerRadius = UDim.new(0, 4)
+	bc.Parent = box
+
+	local hit = Instance.new("TextButton")
+	hit.Name = "SliderHit"
+	hit.AutoButtonColor = false
+	hit.Text = ""
+	hit.BackgroundTransparency = 1
+	hit.BorderSizePixel = 0
+	hit.Size = UDim2.new(0.66, -4, 1, 0)
+	hit.Position = UDim2.fromOffset(0, 0)
+	hit.ZIndex = 2
+	hit.Parent = holder
+
+	local track = Instance.new("Frame")
+	track.Name = "Track"
+	track.BackgroundColor3 = Theme.bgDeep
+	track.BorderSizePixel = 0
+	track.Size = UDim2.new(1, 0, 0, 6)
+	track.Position = UDim2.new(0, 0, 0.5, -3)
+	track.Active = false
+	track.ZIndex = 1
+	track.Parent = hit
+	local tc = Instance.new("UICorner")
+	tc.CornerRadius = UDim.new(1, 0)
+	tc.Parent = track
+
+	local fill = Instance.new("Frame")
+	fill.BackgroundColor3 = Theme.accent
+	fill.BorderSizePixel = 0
+	fill.Size = UDim2.fromScale(0, 1)
+	fill.Active = false
+	fill.ZIndex = 1
+	fill.Parent = track
+	local fc = Instance.new("UICorner")
+	fc.CornerRadius = UDim.new(1, 0)
+	fc.Parent = fill
+
+	local knob = Instance.new("Frame")
+	knob.AnchorPoint = Vector2.new(0.5, 0.5)
+	knob.Size = UDim2.fromOffset(12, 12)
+	knob.Position = UDim2.fromScale(0, 0.5)
+	knob.BackgroundColor3 = Theme.textBright
+	knob.BorderSizePixel = 0
+	knob.Active = false
+	knob.ZIndex = 2
+	knob.Parent = track
+	local kc = Instance.new("UICorner")
+	kc.CornerRadius = UDim.new(1, 0)
+	kc.Parent = knob
+
+	local working = value
+
+	local function paint(n: number)
+		working = math.clamp(n, minV :: number, maxV :: number)
+		local span = (maxV :: number) - (minV :: number)
+		local alpha = if span == 0 then 0 else math.clamp((working - (minV :: number)) / span, 0, 1)
+		fill.Size = UDim2.fromScale(alpha, 1)
+		knob.Position = UDim2.fromScale(alpha, 0.5)
+		box.Text = string.format(" %.3g", working)
+	end
+
+	paint(value)
+
+	local function commit(n: number)
+		paint(n)
+		onCommit(working)
+	end
+
+	hit.MouseButton1Down:Connect(function(rawX, rawY)
+		local host = UiUtil.dockHost(holder)
+		local scroll = holder:FindFirstAncestorWhichIsA("ScrollingFrame")
+		local hostX, hostY = PointerController.toHostLocal(host, rawX, rawY)
+		PointerController.capture(host, {
+			initial = Vector2.new(hostX, hostY),
+			scroll = scroll,
+			onMove = function(x, y)
+				local localX = PointerController.toControlLocal(host, hit, x, y)
+				local nextValue =
+					InteractionMath.valueFromLocal(localX, hit.AbsoluteSize.X, minV :: number, maxV :: number)
+				if nextValue ~= working then
+					commit(nextValue)
+				end
+			end,
+		})
+	end)
+
+	box.FocusLost:Connect(function()
+		local n = tonumber(box.Text)
+		if n then
+			commit(n)
+		else
+			paint(working)
+		end
+	end)
+
+	return holder
+end
+
+function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3) -> ()): Frame
 	local holder = Instance.new("Frame")
 	holder.BackgroundTransparency = 1
 	holder.BorderSizePixel = 0
@@ -164,12 +294,7 @@ function Controls.colorField(
 	hex.TextSize = 11
 	hex.TextColor3 = Theme.textBright
 	hex.TextXAlignment = Enum.TextXAlignment.Left
-	hex.Text = string.format(
-		" %d, %d, %d",
-		math.floor(value.R * 255 + 0.5),
-		math.floor(value.G * 255 + 0.5),
-		math.floor(value.B * 255 + 0.5)
-	)
+	hex.Text = " " .. ColorText.format(value.R, value.G, value.B)
 	hex.Parent = holder
 
 	local hc = Instance.new("UICorner")
@@ -177,42 +302,63 @@ function Controls.colorField(
 	hc.Parent = hex
 
 	local function openPicker()
-		local host = parent:FindFirstAncestorWhichIsA("PluginGui") or parent:FindFirstAncestorOfClass("Frame") or parent
+		local host = UiUtil.dockHost(parent)
+		local original = swatch.BackgroundColor3
+		local committed = original
+
 		local overlay = Instance.new("Frame")
 		overlay.Name = "ColorPicker"
 		overlay.BackgroundColor3 = Color3.new(0, 0, 0)
-		overlay.BackgroundTransparency = 0.45
+		overlay.BackgroundTransparency = 1
 		overlay.Size = UDim2.fromScale(1, 1)
 		overlay.ZIndex = 120
 		overlay.Parent = host
+		Theme.tween(overlay, { BackgroundTransparency = 0.4 }, Theme.tweenMed)
 
 		local panel = Instance.new("Frame")
 		panel.AnchorPoint = Vector2.new(0.5, 0.5)
-		panel.Position = UDim2.fromScale(0.5, 0.5)
-		panel.Size = UDim2.fromOffset(260, 280)
+		panel.Position = UDim2.fromScale(0.5, 0.48)
+		panel.Size = UDim2.fromOffset(268, 292)
 		panel.BackgroundColor3 = Theme.bg
+		panel.BackgroundTransparency = 0.15
 		panel.BorderSizePixel = 0
 		panel.ZIndex = 121
 		panel.Parent = overlay
+		Theme.tween(panel, { BackgroundTransparency = 0, Position = UDim2.fromScale(0.5, 0.5) }, Theme.tweenMed)
 
 		local pc = Instance.new("UICorner")
-		pc.CornerRadius = UDim.new(0, 8)
+		pc.CornerRadius = UDim.new(0, 10)
 		pc.Parent = panel
+		local pstroke = Instance.new("UIStroke")
+		pstroke.Color = Theme.borderLight
+		pstroke.Thickness = 1
+		pstroke.Parent = panel
 
 		local titleBar = Instance.new("Frame")
-		titleBar.BackgroundTransparency = 1
-		titleBar.Size = UDim2.new(1, 0, 0, 30)
+		titleBar.BackgroundColor3 = Theme.bgDeep
+		titleBar.BorderSizePixel = 0
+		titleBar.Size = UDim2.new(1, 0, 0, 32)
 		titleBar.ZIndex = 122
 		titleBar.Active = true
 		titleBar.Parent = panel
+		local tbc = Instance.new("UICorner")
+		tbc.CornerRadius = UDim.new(0, 10)
+		tbc.Parent = titleBar
+		local titleCover = Instance.new("Frame")
+		titleCover.BackgroundColor3 = Theme.bgDeep
+		titleCover.BorderSizePixel = 0
+		titleCover.Position = UDim2.new(0, 0, 1, -10)
+		titleCover.Size = UDim2.new(1, 0, 0, 10)
+		titleCover.ZIndex = 122
+		titleCover.Parent = titleBar
 		UiUtil.makeDraggable(titleBar, panel)
 
 		local title = Instance.new("TextLabel")
 		title.BackgroundTransparency = 1
 		title.Position = UDim2.fromOffset(12, 6)
-		title.Size = UDim2.new(1, -40, 0, 20)
+		title.Size = UDim2.new(1, -48, 0, 20)
 		title.Font = Theme.fontBold
-		title.TextSize = 14
+		title.TextSize = 13
 		title.TextXAlignment = Enum.TextXAlignment.Left
 		title.TextColor3 = Theme.textBright
 		title.Text = "Color"
@@ -220,14 +366,14 @@ function Controls.colorField(
 		title.Parent = titleBar
 
 		local closeX = UiUtil.makeCloseButton(titleBar, 20)
-		closeX.Position = UDim2.new(1, -26, 0, 5)
+		closeX.Position = UDim2.new(1, -26, 0, 6)
 		closeX.ZIndex = 123
 
-		local h, s, v = value:ToHSV()
-		local working = value
+		local h, s, v = original:ToHSV()
+		local working = original
 
 		local preview = Instance.new("Frame")
-		preview.Position = UDim2.fromOffset(12, 36)
+		preview.Position = UDim2.fromOffset(12, 42)
 		preview.Size = UDim2.new(1, -24, 0, 28)
 		preview.BackgroundColor3 = working
 		preview.BorderSizePixel = 0
@@ -237,21 +383,18 @@ function Controls.colorField(
 		prc.CornerRadius = UDim.new(0, 6)
 		prc.Parent = preview
 
-		-- SV square
-		local sv = Instance.new("ImageButton")
-		sv.AutoButtonColor = false
-		sv.Position = UDim2.fromOffset(12, 76)
-		sv.Size = UDim2.fromOffset(180, 140)
+		local sv = Instance.new("Frame")
+		sv.Position = UDim2.fromOffset(12, 80)
+		sv.Size = UDim2.fromOffset(188, 148)
 		sv.BorderSizePixel = 0
 		sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-		sv.Image = ""
+		sv.ClipsDescendants = true
 		sv.ZIndex = 122
 		sv.Parent = panel
 		local svc = Instance.new("UICorner")
-		svc.CornerRadius = UDim.new(0, 6)
+		svc.CornerRadius = UDim.new(0, 8)
 		svc.Parent = sv
 
-		-- Gradient approximation using UIGradient white->transparent and black
 		local white = Instance.new("Frame")
 		white.Size = UDim2.fromScale(1, 1)
 		white.BackgroundColor3 = Color3.new(1, 1, 1)
@@ -283,10 +426,11 @@ function Controls.colorField(
 
 		local cursor = Instance.new("Frame")
 		cursor.AnchorPoint = Vector2.new(0.5, 0.5)
-		cursor.Size = UDim2.fromOffset(10, 10)
-		cursor.BackgroundTransparency = 1
+		cursor.Size = UDim2.fromOffset(14, 14)
+		cursor.BackgroundColor3 = Color3.new(1, 1, 1)
+		cursor.BackgroundTransparency = 0.85
 		cursor.Active = false
-		cursor.ZIndex = 125
+		cursor.ZIndex = 126
 		cursor.Parent = sv
 		local ring = Instance.new("UIStroke")
 		ring.Color = Color3.new(1, 1, 1)
@@ -297,17 +441,25 @@ function Controls.colorField(
 		cc.Parent = cursor
 		cursor.Position = UDim2.fromScale(s, 1 - v)
 
-		-- Hue bar
-		local hueBar = Instance.new("ImageButton")
-		hueBar.AutoButtonColor = false
-		hueBar.Position = UDim2.fromOffset(204, 76)
-		hueBar.Size = UDim2.fromOffset(44, 140)
+		local svHit = Instance.new("TextButton")
+		svHit.AutoButtonColor = false
+		svHit.Text = ""
+		svHit.BackgroundTransparency = 1
+		svHit.BorderSizePixel = 0
+		svHit.Size = UDim2.fromScale(1, 1)
+		svHit.ZIndex = 127
+		svHit.Parent = sv
+
+		local hueBar = Instance.new("Frame")
+		hueBar.Position = UDim2.fromOffset(210, 80)
+		hueBar.Size = UDim2.fromOffset(46, 148)
 		hueBar.BorderSizePixel = 0
 		hueBar.BackgroundColor3 = Color3.new(1, 1, 1)
+		hueBar.ClipsDescendants = true
 		hueBar.ZIndex = 122
 		hueBar.Parent = panel
 		local hbc = Instance.new("UICorner")
-		hbc.CornerRadius = UDim.new(0, 6)
+		hbc.CornerRadius = UDim.new(0, 8)
 		hbc.Parent = hueBar
 		local hg = Instance.new("UIGradient")
 		hg.Rotation = 90
@@ -322,106 +474,130 @@ function Controls.colorField(
 		})
 		hg.Parent = hueBar
 
-		local function refresh()
+		local hueKnob = Instance.new("Frame")
+		hueKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+		hueKnob.Size = UDim2.new(1, -4, 0, 4)
+		hueKnob.Position = UDim2.fromScale(0.5, h)
+		hueKnob.BackgroundColor3 = Theme.textBright
+		hueKnob.BorderSizePixel = 0
+		hueKnob.Active = false
+		hueKnob.ZIndex = 124
+		hueKnob.Parent = hueBar
+		local hkc = Instance.new("UICorner")
+		hkc.CornerRadius = UDim.new(1, 0)
+		hkc.Parent = hueKnob
+
+		local hueHit = Instance.new("TextButton")
+		hueHit.AutoButtonColor = false
+		hueHit.Text = ""
+		hueHit.BackgroundTransparency = 1
+		hueHit.BorderSizePixel = 0
+		hueHit.Size = UDim2.fromScale(1, 1)
+		hueHit.ZIndex = 127
+		hueHit.Parent = hueBar
+
+		local function paintField(c: Color3)
+			swatch.BackgroundColor3 = c
+			hex.Text = " " .. ColorText.format(c.R, c.G, c.B)
+		end
+
+		local function refresh(live: boolean?)
 			working = Color3.fromHSV(h, s, v)
 			preview.BackgroundColor3 = working
 			sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
 			cursor.Position = UDim2.fromScale(s, 1 - v)
-			swatch.BackgroundColor3 = working
-			hex.Text = string.format(
-				" %d, %d, %d",
-				math.floor(working.R * 255 + 0.5),
-				math.floor(working.G * 255 + 0.5),
-				math.floor(working.B * 255 + 0.5)
-			)
+			hueKnob.Position = UDim2.fromScale(0.5, h)
+			paintField(working)
+			if live ~= false then
+				committed = working
+				onCommit(working)
+			end
 		end
 
-		local function pickSV(inputPos: Vector3)
-			local rel = Vector2.new(inputPos.X, inputPos.Y) - sv.AbsolutePosition
-			s = math.clamp(rel.X / sv.AbsoluteSize.X, 0, 1)
-			v = 1 - math.clamp(rel.Y / sv.AbsoluteSize.Y, 0, 1)
-			refresh()
+		-- Pick using overlay-local coordinates (AbsolutePosition deltas are PluginGui-safe).
+		local function pickSVAtHost(hostX: number, hostY: number)
+			local localPos = UiUtil.hostToLocal(overlay, sv, hostX, hostY)
+			local w = math.max(sv.AbsoluteSize.X, sv.Size.X.Offset, 1)
+			local hh = math.max(sv.AbsoluteSize.Y, sv.Size.Y.Offset, 1)
+			s = math.clamp(localPos.X / w, 0, 1)
+			v = 1 - math.clamp(localPos.Y / hh, 0, 1)
+			refresh(true)
 		end
 
-		local function pickHue(inputPos: Vector3)
-			local rel = inputPos.Y - hueBar.AbsolutePosition.Y
-			h = math.clamp(rel / hueBar.AbsoluteSize.Y, 0, 1)
-			refresh()
+		local function pickHueAtHost(hostX: number, hostY: number)
+			local localPos = UiUtil.hostToLocal(overlay, hueBar, hostX, hostY)
+			local hh = math.max(hueBar.AbsoluteSize.Y, hueBar.Size.Y.Offset, 1)
+			h = math.clamp(localPos.Y / hh, 0, 1)
+			refresh(true)
 		end
 
-		sv.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				pickSV(input.Position)
-			end
-		end)
-		sv.InputChanged:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseMovement and input.UserInputState == Enum.UserInputState.Change then
-				-- drag handled below
-			end
-		end)
-
-		local UserInputService = game:GetService("UserInputService")
-		local draggingSV = false
-		local draggingHue = false
-		sv.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				draggingSV = true
-				pickSV(input.Position)
-			end
-		end)
-		hueBar.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				draggingHue = true
-				pickHue(input.Position)
-			end
-		end)
-		local moveConn = UserInputService.InputChanged:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseMovement then
-				if draggingSV then
-					pickSV(input.Position)
-				elseif draggingHue then
-					pickHue(input.Position)
+		local function beginChannel(kind: string, rawX: number, rawY: number)
+			local hostX, hostY = PointerController.toHostLocal(overlay, rawX, rawY)
+			local function sample(x: number, y: number)
+				if kind == "sv" then
+					pickSVAtHost(x, y)
+				else
+					pickHueAtHost(x, y)
 				end
 			end
+			PointerController.capture(overlay, {
+				initial = Vector2.new(hostX, hostY),
+				onMove = sample,
+			})
+		end
+
+		svHit.MouseButton1Down:Connect(function(x, y)
+			beginChannel("sv", x, y)
 		end)
-		local endConn = UserInputService.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				draggingSV = false
-				draggingHue = false
-			end
+		hueHit.MouseButton1Down:Connect(function(x, y)
+			beginChannel("hue", x, y)
 		end)
 
 		local function cleanup()
-			moveConn:Disconnect()
-			endConn:Disconnect()
+			local cap = overlay:FindFirstChild("_FraguaCapture")
+			if cap then
+				cap:Destroy()
+			end
 			overlay:Destroy()
 		end
 
-		closeX.MouseButton1Click:Connect(cleanup)
+		local function revertAndClose()
+			paintField(original)
+			onCommit(original)
+			cleanup()
+		end
 
-		local cancel = Theme.makeButton(panel, "Cancel", { Size = UDim2.fromOffset(80, 28) })
-		cancel.Position = UDim2.new(1, -180, 1, -40)
+		closeX.MouseButton1Click:Connect(revertAndClose)
+
+		local cancel = Theme.makeButton(panel, "Cancel", { Size = UDim2.fromOffset(84, 28) })
+		cancel.Position = UDim2.new(1, -184, 1, -40)
 		cancel.ZIndex = 122
-		cancel.MouseButton1Click:Connect(cleanup)
+		cancel.MouseButton1Click:Connect(revertAndClose)
 
-		local okBtn = Theme.makeButton(panel, "OK", { Size = UDim2.fromOffset(80, 28) })
+		local okBtn = Theme.makeButton(panel, "Done", { Size = UDim2.fromOffset(84, 28) })
 		okBtn.Position = UDim2.new(1, -90, 1, -40)
 		okBtn.BackgroundColor3 = Theme.accent
 		okBtn.ZIndex = 122
 		okBtn.MouseButton1Click:Connect(function()
-			onCommit(working)
+			onCommit(committed)
 			cleanup()
 		end)
+
+		refresh(false)
 	end
 
 	swatch.MouseButton1Click:Connect(openPicker)
 
 	hex.FocusLost:Connect(function()
-		local r, g, b = string.match(hex.Text, "(%d+)%s*,%s*(%d+)%s*,%s*(%d+)")
+		local r, g, b = ColorText.parse(hex.Text)
 		if r then
-			local c = Color3.fromRGB(tonumber(r) :: number, tonumber(g) :: number, tonumber(b) :: number)
+			local c = Color3.new(r, g :: number, b :: number)
 			swatch.BackgroundColor3 = c
+			hex.Text = " " .. ColorText.format(c.R, c.G, c.B)
 			onCommit(c)
+		else
+			hex.Text = " "
+				.. ColorText.format(swatch.BackgroundColor3.R, swatch.BackgroundColor3.G, swatch.BackgroundColor3.B)
 		end
 	end)
 

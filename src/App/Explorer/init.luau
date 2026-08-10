@@ -3,6 +3,7 @@ local Selection = game:GetService("Selection")
 
 local Theme = require(script.Parent.Shared.Theme)
 local Host = require(script.Parent.Behaviors.Host)
+local SettingsUI = require(script.Parent.Settings)
 local InsertPicker = require(script.InsertPicker)
 local Tree = require(script.Tree)
 
@@ -32,26 +33,52 @@ function Explorer.mount(widget: DockWidgetPluginGui)
 
 	local search = Instance.new("TextBox")
 	search.Name = "Search"
-	search.PlaceholderText = "Filter workspace"
+	search.PlaceholderText = "Filter..."
 	search.ClearTextOnFocus = false
 	search.Text = ""
 	search.Font = Theme.font
-	search.TextSize = 12
+	search.TextSize = 13
 	search.TextColor3 = Theme.textBright
 	search.PlaceholderColor3 = Theme.textMuted
 	search.BackgroundColor3 = Theme.inputBg
 	search.BorderSizePixel = 0
-	search.Position = UDim2.fromOffset(8, 5)
-	search.Size = UDim2.new(1, -16, 0, 22)
+	search.Position = UDim2.fromOffset(8, 6)
+	search.Size = UDim2.new(1, -44, 0, 24)
 	search.Parent = toolbar
 
 	local sc = Instance.new("UICorner")
-	sc.CornerRadius = UDim.new(0, 5)
+	sc.CornerRadius = Theme.corner
 	sc.Parent = search
 
 	local searchPad = Instance.new("UIPadding")
-	searchPad.PaddingLeft = UDim.new(0, 8)
+	searchPad.PaddingLeft = UDim.new(0, 10)
 	searchPad.Parent = search
+
+	local gear = Instance.new("TextButton")
+	gear.Name = "Settings"
+	gear.AutoButtonColor = false
+	gear.BackgroundColor3 = Theme.inputBg
+	gear.BorderSizePixel = 0
+	gear.AnchorPoint = Vector2.new(1, 0)
+	gear.Position = UDim2.new(1, -8, 0, 6)
+	gear.Size = UDim2.fromOffset(24, 24)
+	gear.Font = Enum.Font.GothamBold
+	gear.TextSize = 14
+	gear.Text = "S"
+	gear.TextColor3 = Theme.textMuted
+	gear.Parent = toolbar
+	local gc = Instance.new("UICorner")
+	gc.CornerRadius = Theme.corner
+	gc.Parent = gear
+	gear.MouseEnter:Connect(function()
+		Theme.tween(gear, { BackgroundColor3 = Theme.bgHover, TextColor3 = Theme.textBright })
+	end)
+	gear.MouseLeave:Connect(function()
+		Theme.tween(gear, { BackgroundColor3 = Theme.inputBg, TextColor3 = Theme.textMuted })
+	end)
+	gear.MouseButton1Click:Connect(function()
+		SettingsUI.open(root)
+	end)
 
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.Name = "Tree"

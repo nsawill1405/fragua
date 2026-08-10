@@ -1,31 +1,82 @@
 -- Modern Studio-dark tokens for Fragua dock UIs.
+local TweenService = game:GetService("TweenService")
+
+local function fontOrFallback(name: string, fallback: Enum.Font): Enum.Font
+	local ok, value = pcall(function()
+		return (Enum.Font :: any)[name]
+	end)
+	return if ok and value then value else fallback
+end
+
 local Theme = {
-	bg = Color3.fromRGB(40, 40, 42),
-	bgDeep = Color3.fromRGB(30, 30, 32),
-	bgRaised = Color3.fromRGB(48, 48, 52),
-	bgHover = Color3.fromRGB(56, 56, 62),
-	bgSelected = Color3.fromRGB(0, 112, 198),
-	bgSelectedMuted = Color3.fromRGB(28, 78, 128),
-	border = Color3.fromRGB(22, 22, 24),
-	borderLight = Color3.fromRGB(68, 68, 74),
-	text = Color3.fromRGB(214, 214, 218),
-	textMuted = Color3.fromRGB(148, 148, 156),
-	textBright = Color3.fromRGB(248, 248, 250),
-	accent = Color3.fromRGB(47, 156, 255),
-	accentSoft = Color3.fromRGB(36, 90, 140),
-	danger = Color3.fromRGB(232, 88, 96),
-	dangerHover = Color3.fromRGB(255, 120, 128),
-	success = Color3.fromRGB(80, 180, 110),
-	section = Color3.fromRGB(48, 48, 52),
-	inputBg = Color3.fromRGB(26, 26, 28),
-	font = Enum.Font.Gotham,
-	fontBold = Enum.Font.GothamMedium,
+	bg = Color3.fromRGB(36, 37, 41),
+	bgDeep = Color3.fromRGB(24, 25, 28),
+	bgRaised = Color3.fromRGB(46, 48, 54),
+	bgHover = Color3.fromRGB(58, 61, 70),
+	bgSelected = Color3.fromRGB(38, 110, 196),
+	bgSelectedMuted = Color3.fromRGB(32, 72, 120),
+	border = Color3.fromRGB(18, 19, 22),
+	borderLight = Color3.fromRGB(72, 76, 86),
+	text = Color3.fromRGB(210, 212, 218),
+	textMuted = Color3.fromRGB(140, 144, 156),
+	textBright = Color3.fromRGB(250, 251, 255),
+	accent = Color3.fromRGB(64, 156, 255),
+	accentSoft = Color3.fromRGB(40, 96, 150),
+	danger = Color3.fromRGB(232, 96, 104),
+	dangerHover = Color3.fromRGB(255, 128, 136),
+	success = Color3.fromRGB(88, 196, 130),
+	section = Color3.fromRGB(42, 44, 50),
+	inputBg = Color3.fromRGB(22, 23, 27),
+	matchTint = Color3.fromRGB(48, 78, 110),
+	dropTint = Color3.fromRGB(56, 120, 180),
+	font = fontOrFallback("BuilderSans", Enum.Font.Gotham),
+	fontBold = fontOrFallback("BuilderSansMedium", Enum.Font.GothamMedium),
 	fontMono = Enum.Font.RobotoMono,
-	rowHeight = 24,
-	toolbarHeight = 32,
-	headerHeight = 34,
-	corner = UDim.new(0, 5),
+	spacing = { xs = 4, sm = 8, md = 12, lg = 16 },
+	radius = { control = UDim.new(0, 6), card = UDim.new(0, 8), overlay = UDim.new(0, 10) },
+	typeSize = { caption = 10, secondary = 11, control = 12, body = 13, title = 14 },
+	rowHeight = 26,
+	toolbarHeight = 34,
+	headerHeight = 36,
+	corner = UDim.new(0, 6),
+	tweenFast = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	tweenMed = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	tweenSnap = TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 }
+
+local activeTweens: { [Instance]: { [string]: Tween } } = setmetatable({}, { __mode = "k" }) :: any
+
+function Theme.play(inst: Instance, key: string, props: { [string]: any }, info: TweenInfo?): Tween
+	local byKey = activeTweens[inst]
+	if not byKey then
+		byKey = {}
+		activeTweens[inst] = byKey
+	end
+	local previous = byKey[key]
+	if previous then
+		previous:Cancel()
+	end
+	local tweenInfo = info or Theme.tweenFast
+	local ok, Store = pcall(function()
+		return require(script.Parent.Parent.Settings.Store)
+	end)
+	if ok and Store and Store.getAnimations and not Store.getAnimations() then
+		tweenInfo = TweenInfo.new(0)
+	end
+	local tween = TweenService:Create(inst, tweenInfo, props)
+	byKey[key] = tween
+	tween.Completed:Once(function()
+		if activeTweens[inst] and activeTweens[inst][key] == tween then
+			activeTweens[inst][key] = nil
+		end
+	end)
+	tween:Play()
+	return tween
+end
+
+function Theme.tween(inst: Instance, props: { [string]: any }, info: TweenInfo?): Tween
+	return Theme.play(inst, "default", props, info)
+end
 
 function Theme.applyText(label: TextLabel | TextButton | TextBox, bright: boolean?)
 	label.Font = Theme.font
@@ -44,19 +95,19 @@ function Theme.makeButton(parent: Instance, text: string, props: { [string]: any
 	btn.TextColor3 = Theme.textBright
 	btn.BackgroundColor3 = Theme.bgRaised
 	btn.BorderSizePixel = 0
-	btn.Size = props and props.Size or UDim2.new(0, 80, 0, 26)
+	btn.Size = props and props.Size or UDim2.fromOffset(80, 28)
 	btn.Parent = parent
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = Theme.corner
+	corner.CornerRadius = Theme.radius.control
 	corner.Parent = btn
 
 	local base = btn.BackgroundColor3
 	btn.MouseEnter:Connect(function()
-		btn.BackgroundColor3 = Theme.bgHover
+		Theme.play(btn, "hover", { BackgroundColor3 = Theme.bgHover })
 	end)
 	btn.MouseLeave:Connect(function()
-		btn.BackgroundColor3 = base
+		Theme.play(btn, "hover", { BackgroundColor3 = base })
 	end)
 
 	return btn
@@ -81,12 +132,11 @@ function Theme.iconButton(parent: Instance, text: string, size: number?): TextBu
 
 	btn.MouseEnter:Connect(function()
 		btn.TextColor3 = Theme.textBright
-		btn.BackgroundTransparency = 0.75
-		btn.BackgroundColor3 = Theme.bgHover
+		Theme.tween(btn, { BackgroundTransparency = 0.7, BackgroundColor3 = Theme.bgHover })
 	end)
 	btn.MouseLeave:Connect(function()
 		btn.TextColor3 = Theme.textMuted
-		btn.BackgroundTransparency = 1
+		Theme.tween(btn, { BackgroundTransparency = 1 })
 	end)
 
 	return btn

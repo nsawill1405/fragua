@@ -11,12 +11,7 @@ function InteractionMath.clampAlpha(localValue: number, extent: number): number
 	return math.clamp(localValue / extent, 0, 1)
 end
 
-function InteractionMath.valueFromLocal(
-	localValue: number,
-	extent: number,
-	minValue: number,
-	maxValue: number
-): number
+function InteractionMath.valueFromLocal(localValue: number, extent: number, minValue: number, maxValue: number): number
 	return minValue + InteractionMath.clampAlpha(localValue, extent) * (maxValue - minValue)
 end
 

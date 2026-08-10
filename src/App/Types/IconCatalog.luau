@@ -79,39 +79,87 @@ local CLASS_ICONS = {
 	"Trail",
 	"WeldConstraint",
 	"Motor6D",
+	"UnionOperation",
+	"NegateOperation",
+	"WedgePart",
+	"CornerWedgePart",
+	"TrussPart",
+	"Terrain",
+	"Accessory",
+	"Hat",
+	"Pants",
+	"Shirt",
+	"ShirtGraphic",
+	"SpecialMesh",
+	"BlockMesh",
+	"CylinderMesh",
+	"FileMesh",
+	"HumanoidDescription",
+	"Animator",
+	"AnimationController",
+	"BodyColors",
+	"ForceField",
+	"LinearVelocity",
+	"AngularVelocity",
+	"AlignPosition",
+	"AlignOrientation",
+	"Bone",
+	"WorldModel",
+	"ViewportFrame",
+	"CanvasGroup",
+	"UIGridLayout",
+	"UIAspectRatioConstraint",
+	"UIScale",
+	"UIGradient",
+	"UISizeConstraint",
+	"ScreenGui",
+	"SurfaceLight",
+	"Sky",
+	"Atmosphere",
+	"BloomEffect",
+	"BlurEffect",
+	"ColorCorrectionEffect",
+	"DepthOfFieldEffect",
+	"SunRaysEffect",
+	"Color3Value",
+	"Vector3Value",
+	"CFrameValue",
+	"RayValue",
+	"BrickColorValue",
 }
 
+-- ASCII-safe glyphs because Studio often renders real emoji as empty tofu boxes.
 local EMOJI_ICONS = {
-	{ id = "emoji_skull", label = "Skull", emoji = "💀" },
-	{ id = "emoji_zombie", label = "Zombie", emoji = "🧟" },
-	{ id = "emoji_ghost", label = "Ghost", emoji = "👻" },
-	{ id = "emoji_robot", label = "Robot", emoji = "🤖" },
-	{ id = "emoji_alien", label = "Alien", emoji = "👽" },
-	{ id = "emoji_dragon", label = "Dragon", emoji = "🐉" },
-	{ id = "emoji_fire", label = "Fire", emoji = "🔥" },
-	{ id = "emoji_ice", label = "Ice", emoji = "❄" },
-	{ id = "emoji_bolt", label = "Bolt", emoji = "⚡" },
-	{ id = "emoji_heart", label = "Heart", emoji = "❤" },
-	{ id = "emoji_star", label = "Star", emoji = "⭐" },
-	{ id = "emoji_sword", label = "Sword", emoji = "⚔" },
-	{ id = "emoji_shield", label = "Shield", emoji = "🛡" },
-	{ id = "emoji_key", label = "Key", emoji = "🔑" },
-	{ id = "emoji_gem", label = "Gem", emoji = "💎" },
-	{ id = "emoji_crown", label = "Crown", emoji = "👑" },
-	{ id = "emoji_gear", label = "Gear", emoji = "⚙" },
-	{ id = "emoji_package", label = "Package", emoji = "📦" },
-	{ id = "emoji_scroll", label = "Scroll", emoji = "📜" },
-	{ id = "emoji_book", label = "Book", emoji = "📕" },
-	{ id = "emoji_warning", label = "Warning", emoji = "⚠" },
-	{ id = "emoji_check", label = "Check", emoji = "✓" },
-	{ id = "emoji_cross", label = "Cross", emoji = "✕" },
+	{ id = "emoji_skull", label = "Skull", emoji = "X" },
+	{ id = "emoji_zombie", label = "Zombie", emoji = "Z" },
+	{ id = "emoji_ghost", label = "Ghost", emoji = "G" },
+	{ id = "emoji_robot", label = "Robot", emoji = "R" },
+	{ id = "emoji_alien", label = "Alien", emoji = "A" },
+	{ id = "emoji_dragon", label = "Dragon", emoji = "D" },
+	{ id = "emoji_fire", label = "Fire", emoji = "*" },
+	{ id = "emoji_ice", label = "Ice", emoji = "*" },
+	{ id = "emoji_bolt", label = "Bolt", emoji = "!" },
+	{ id = "emoji_heart", label = "Heart", emoji = "<3" },
+	{ id = "emoji_star", label = "Star", emoji = "*" },
+	{ id = "emoji_sword", label = "Sword", emoji = "/" },
+	{ id = "emoji_shield", label = "Shield", emoji = "O" },
+	{ id = "emoji_key", label = "Key", emoji = "K" },
+	{ id = "emoji_gem", label = "Gem", emoji = "+" },
+	{ id = "emoji_crown", label = "Crown", emoji = "^" },
+	{ id = "emoji_gear", label = "Gear", emoji = "*" },
+	{ id = "emoji_package", label = "Package", emoji = "#" },
+	{ id = "emoji_scroll", label = "Scroll", emoji = "=" },
+	{ id = "emoji_book", label = "Book", emoji = "B" },
+	{ id = "emoji_warning", label = "Warning", emoji = "!" },
+	{ id = "emoji_check", label = "Check", emoji = "OK" },
+	{ id = "emoji_cross", label = "Cross", emoji = "x" },
 	{ id = "emoji_plus", label = "Plus", emoji = "+" },
-	{ id = "emoji_sparkles", label = "Sparkles", emoji = "✨" },
-	{ id = "emoji_target", label = "Target", emoji = "◎" },
-	{ id = "emoji_rocket", label = "Rocket", emoji = "🚀" },
-	{ id = "emoji_bug", label = "Bug", emoji = "🐛" },
-	{ id = "emoji_eye", label = "Eye", emoji = "👁" },
-	{ id = "emoji_lock", label = "Lock", emoji = "🔒" },
+	{ id = "emoji_sparkles", label = "Sparkles", emoji = "*" },
+	{ id = "emoji_target", label = "Target", emoji = "o" },
+	{ id = "emoji_rocket", label = "Rocket", emoji = ">" },
+	{ id = "emoji_bug", label = "Bug", emoji = "b" },
+	{ id = "emoji_eye", label = "Eye", emoji = "o" },
+	{ id = "emoji_lock", label = "Lock", emoji = "#" },
 }
 
 local IconCatalog = {}
@@ -155,11 +203,23 @@ function IconCatalog.get(id: string?): IconDef
 	if id and byId[id] then
 		return byId[id]
 	end
-	return byId["class_Configuration"] or {
+	-- resolve unknown class_* via StudioService at paint time
+	if id and string.sub(id, 1, 6) == "class_" then
+		local className = string.sub(id, 7)
+		if className ~= "" then
+			return {
+				id = id,
+				label = className,
+				kind = "class",
+				className = className,
+			}
+		end
+	end
+	return byId["class_Folder"] or {
 		id = "fallback",
 		label = "Custom",
 		kind = "emoji",
-		emoji = "◆",
+		emoji = "*",
 	}
 end
 
@@ -197,7 +257,7 @@ function IconCatalog.applyTo(gui: ImageLabel | TextLabel, iconId: string?)
 		elseif def.kind == "class" and def.className then
 			gui.Text = string.sub(def.className, 1, 1)
 		else
-			gui.Text = "◆"
+			gui.Text = "*"
 		end
 	end
 end
@@ -226,7 +286,8 @@ function IconCatalog.createIconWidget(parent: Instance, iconId: string?, size: n
 	emoji.BackgroundTransparency = 1
 	emoji.BorderSizePixel = 0
 	emoji.Size = UDim2.fromScale(1, 1)
-	emoji.Font = Enum.Font.GothamBold
+	-- SourceSans renders glyphs reliably; Gotham often shows empty boxes
+	emoji.Font = Enum.Font.SourceSansBold
 	emoji.TextSize = math.max(10, sizePx - 1)
 	emoji.TextColor3 = Color3.fromRGB(230, 230, 230)
 	emoji.Text = ""
@@ -236,13 +297,16 @@ function IconCatalog.createIconWidget(parent: Instance, iconId: string?, size: n
 
 	local function paint(id: string?)
 		local def = IconCatalog.get(id)
+		image.Image = ""
+		image.BackgroundTransparency = 1
 		if def.kind == "emoji" then
 			image.Visible = false
 			emoji.Visible = true
-			emoji.Text = def.emoji or "◆"
+			emoji.Text = def.emoji or "+"
 		elseif def.kind == "class" and def.className and applyClassIcon(image, def.className) then
 			emoji.Visible = false
 			image.Visible = true
+			image.BackgroundTransparency = 1
 		elseif def.kind == "image" and def.image then
 			emoji.Visible = false
 			image.Visible = true
@@ -250,10 +314,12 @@ function IconCatalog.createIconWidget(parent: Instance, iconId: string?, size: n
 			image.ImageRectOffset = Vector2.zero
 			image.ImageRectSize = Vector2.zero
 			image.ImageTransparency = 0
+			image.BackgroundTransparency = 1
 		else
+			-- Failed class icon: use a letter fallback and never leave a blank image box.
 			image.Visible = false
 			emoji.Visible = true
-			emoji.Text = if def.className then string.upper(string.sub(def.className, 1, 1)) else "◆"
+			emoji.Text = if def.className then string.upper(string.sub(def.className, 1, 1)) else "+"
 		end
 	end
 

@@ -3,9 +3,15 @@ local Selection = game:GetService("Selection")
 
 local Explorer = require(script.App.Explorer)
 local Properties = require(script.App.Properties)
+local ScriptEditor = require(script.App.ScriptEditor)
+local SettingsStore = require(script.App.Settings.Store)
+local EnsurePlaceModules = require(script.App.Runtime.EnsurePlaceModules)
 local Host = require(script.App.Behaviors.Host)
 local Registry = require(script.App.Types.Registry)
 local Constants = require(script.App.Shared.Constants)
+
+SettingsStore.bind(plugin)
+EnsurePlaceModules.sync()
 
 local toolbar = plugin:CreateToolbar(Constants.PLUGIN_NAME)
 
@@ -27,45 +33,39 @@ propertiesBtn.ClickableWhenViewportHidden = true
 
 local scriptBtn = toolbar:CreateButton(
 	"FraguaScriptEditor",
-	"Script Editor (deferred)",
+	"Open Fragua Script Editor",
 	"rbxasset://textures/Debugger/Breakpoints/Breakpoint.png",
 	"Script Editor"
 )
 scriptBtn.ClickableWhenViewportHidden = true
 scriptBtn.Enabled = true
 
-local explorerInfo = DockWidgetPluginGuiInfo.new(
-	Enum.InitialDockState.Left,
-	true,
-	false,
-	320,
-	480,
-	240,
-	200
-)
-local propertiesInfo = DockWidgetPluginGuiInfo.new(
-	Enum.InitialDockState.Right,
-	true,
-	false,
-	320,
-	480,
-	240,
-	200
-)
+local explorerInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Left, true, false, 320, 480, 240, 200)
+local propertiesInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, true, false, 320, 480, 240, 200)
+local scriptInfo = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 520, 420, 320, 240)
 
-local explorerWidget = plugin:CreateDockWidgetPluginGui("FraguaExplorer", explorerInfo)
+local explorerWidget = plugin:CreateDockWidgetPluginGuiAsync("FraguaExplorer", explorerInfo)
 explorerWidget.Title = "Fragua Explorer"
 explorerWidget.Name = "FraguaExplorer"
 
-local propertiesWidget = plugin:CreateDockWidgetPluginGui("FraguaProperties", propertiesInfo)
+local propertiesWidget = plugin:CreateDockWidgetPluginGuiAsync("FraguaProperties", propertiesInfo)
 propertiesWidget.Title = "Fragua Properties"
 propertiesWidget.Name = "FraguaProperties"
+
+local scriptWidget = plugin:CreateDockWidgetPluginGuiAsync("FraguaScriptEditor", scriptInfo)
+scriptWidget.Title = "Fragua Script"
+scriptWidget.Name = "FraguaScriptEditor"
 
 Registry.seedDefaults()
 Host.start()
 
 local explorerApi = Explorer.mount(explorerWidget)
-local propertiesApi = Properties.mount(propertiesWidget)
+local scriptApi = ScriptEditor.mount(scriptWidget)
+local propertiesApi = Properties.mount(propertiesWidget, {
+	onEditScript = function(context)
+		scriptApi.openTarget(context)
+	end,
+})
 
 explorerBtn.Click:Connect(function()
 	explorerWidget.Enabled = not explorerWidget.Enabled
@@ -78,8 +78,8 @@ propertiesBtn.Click:Connect(function()
 end)
 
 scriptBtn.Click:Connect(function()
-	warn("[Fragua] Script Editor is deferred for a later release. Use Studio's built-in editor for now.")
-	scriptBtn:SetActive(false)
+	scriptWidget.Enabled = not scriptWidget.Enabled
+	scriptBtn:SetActive(scriptWidget.Enabled)
 end)
 
 explorerWidget:GetPropertyChangedSignal("Enabled"):Connect(function()
@@ -88,9 +88,13 @@ end)
 propertiesWidget:GetPropertyChangedSignal("Enabled"):Connect(function()
 	propertiesBtn:SetActive(propertiesWidget.Enabled)
 end)
+scriptWidget:GetPropertyChangedSignal("Enabled"):Connect(function()
+	scriptBtn:SetActive(scriptWidget.Enabled)
+end)
 
 explorerBtn:SetActive(explorerWidget.Enabled)
 propertiesBtn:SetActive(propertiesWidget.Enabled)
+scriptBtn:SetActive(scriptWidget.Enabled)
 
 Selection.SelectionChanged:Connect(function()
 	Host.onSelection(Selection:Get())
@@ -103,8 +107,10 @@ plugin.Unloading:Connect(function()
 	if propertiesApi and propertiesApi.destroy then
 		propertiesApi.destroy()
 	end
+	if scriptApi and scriptApi.destroy then
+		scriptApi.destroy()
+	end
 end)
 
--- Keep ChangeHistoryService referenced so waypoints from panels stay meaningful in undo stack.
 ChangeHistoryService:SetWaypoint("Fragua Ready")
-print("[Fragua] Plugin loaded — forge custom instance types in Explorer → Insert Object.")
+print("[Fragua] Plugin loaded - forge custom instance types in Explorer > Insert Object.")

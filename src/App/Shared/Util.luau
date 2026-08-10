@@ -34,7 +34,16 @@ end
 
 function Util.attributeTypeName(value: any): string
 	local t = typeof(value)
-	if t == "number" or t == "string" or t == "boolean" or t == "Color3" or t == "Vector3" or t == "Vector2" or t == "UDim2" or t == "CFrame" then
+	if
+		t == "number"
+		or t == "string"
+		or t == "boolean"
+		or t == "Color3"
+		or t == "Vector3"
+		or t == "Vector2"
+		or t == "UDim2"
+		or t == "CFrame"
+	then
 		return t
 	end
 	return "string"
@@ -83,7 +92,12 @@ end
 function Util.formatValue(value: any): string
 	local t = typeof(value)
 	if t == "Color3" then
-		return string.format("%d, %d, %d", math.floor(value.R * 255 + 0.5), math.floor(value.G * 255 + 0.5), math.floor(value.B * 255 + 0.5))
+		return string.format(
+			"%d, %d, %d",
+			math.floor(value.R * 255 + 0.5),
+			math.floor(value.G * 255 + 0.5),
+			math.floor(value.B * 255 + 0.5)
+		)
 	elseif t == "Vector3" then
 		return string.format("%.3g, %.3g, %.3g", value.X, value.Y, value.Z)
 	elseif t == "boolean" then
