@@ -14,4 +14,5 @@ TestRunner.run({
 	SchemaResolver = require("./SchemaResolver.spec"),
 	TypeEditorLayout = require("./TypeEditorLayout.spec"),
 	InsertFlow = require("./InsertFlow.spec"),
+	IconData = require("./IconData.spec"),
 })

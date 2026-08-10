@@ -117,6 +117,7 @@ function IconPicker.open(parentGui: Instance, currentId: string?, onPick: (strin
 				lower == ""
 				or string.find(string.lower(def.label), lower, 1, true)
 				or string.find(string.lower(def.id), lower, 1, true)
+				or string.find(string.lower(def.category or ""), lower, 1, true)
 			then
 				local btn = Instance.new("TextButton")
 				btn.Name = def.id
