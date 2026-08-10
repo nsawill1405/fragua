@@ -12,6 +12,29 @@ export type EngineProp = {
 local EngineProps = {}
 
 local MATERIALS = require(script.Parent.Parent.Types.EngineSchemas).materials()
+local EnginePropResolver = require(script.Parent.EnginePropResolver)
+
+local BASE_PART_PROPS = {
+	{ name = "Anchored", category = "Behavior", valueType = "boolean" },
+	{ name = "CanCollide", category = "Behavior", valueType = "boolean" },
+	{ name = "CanQuery", category = "Behavior", valueType = "boolean" },
+	{ name = "CanTouch", category = "Behavior", valueType = "boolean" },
+	{ name = "Massless", category = "Behavior", valueType = "boolean" },
+	{ name = "CastShadow", category = "Appearance", valueType = "boolean" },
+	{ name = "Transparency", category = "Appearance", valueType = "number" },
+	{ name = "Reflectance", category = "Appearance", valueType = "number" },
+	{ name = "Color", category = "Appearance", valueType = "Color3" },
+	{
+		name = "Material",
+		category = "Appearance",
+		valueType = "enum",
+		enumType = "Material",
+		enumItems = MATERIALS,
+	},
+	{ name = "Size", category = "Transform", valueType = "Vector3" },
+	{ name = "Position", category = "Transform", valueType = "Vector3" },
+	{ name = "Orientation", category = "Transform", valueType = "Vector3" },
+}
 
 local BY_CLASS: { [string]: { EngineProp } } = {
 	Instance = {
@@ -415,8 +438,21 @@ local SERVICE_NAMES = {
 }
 
 function EngineProps.forInstance(instance: Instance): { EngineProp }
-	local list = BY_CLASS[instance.ClassName]
-	if not list then
+	local exact = BY_CLASS[instance.ClassName]
+	local isBasePart = instance:IsA("BasePart")
+	local list
+	if exact or isBasePart then
+		list = EnginePropResolver.resolve(
+			instance.ClassName,
+			function(className)
+				return instance:IsA(className)
+			end,
+			BY_CLASS,
+			{
+				{ className = "BasePart", properties = BASE_PART_PROPS },
+			}
+		)
+	else
 		if SERVICE_NAMES[instance.ClassName] or instance.Parent == game then
 			list = SERVICE_FALLBACK
 		else

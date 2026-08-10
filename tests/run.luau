@@ -16,4 +16,5 @@ TestRunner.run({
 	TypeEditorLayout = require("./TypeEditorLayout.spec"),
 	InsertFlow = require("./InsertFlow.spec"),
 	IconData = require("./IconData.spec"),
+	EnginePropResolver = require("./EnginePropResolver.spec"),
 })
