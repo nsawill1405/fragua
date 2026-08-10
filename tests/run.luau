@@ -17,4 +17,5 @@ TestRunner.run({
 	InsertFlow = require("./InsertFlow.spec"),
 	IconData = require("./IconData.spec"),
 	EnginePropResolver = require("./EnginePropResolver.spec"),
+	ScriptHeader = require("./ScriptHeader.spec"),
 })
