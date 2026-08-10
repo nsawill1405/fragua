@@ -937,8 +937,27 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 		selectedIcon = editing.icon
 		iconPreview:SetAttribute("IconId", selectedIcon)
 	end
+	local savedTypeId: string? = nil
+
+	local function finishSaved(typeId: string): boolean
+		if onSaved then
+			local accepted, message = onSaved(typeId)
+			if accepted == false then
+				savedTypeId = typeId
+				errorLabel.Text = message or "Type saved, but the next action failed."
+				save.Text = "Retry insert"
+				return false
+			end
+		end
+		overlay:Destroy()
+		return true
+	end
 
 	save.MouseButton1Click:Connect(function()
+		if savedTypeId then
+			finishSaved(savedTypeId)
+			return
+		end
 		local name = string.gsub(nameBox.Text, "^%s*(.-)%s*$", "%1")
 		if name == "" or not string.match(name, "^[%a_][%w_]*$") then
 			errorLabel.Text = "Use a valid identifier name."
@@ -1009,14 +1028,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 		if previous then
 			Registry.migrateInstances(name, previous, def)
 		end
-		if onSaved then
-			local accepted, message = onSaved(name)
-			if accepted == false then
-				errorLabel.Text = message or "Type saved, but the next action failed."
-				return
-			end
-		end
-		overlay:Destroy()
+		finishSaved(name)
 	end)
 end
 

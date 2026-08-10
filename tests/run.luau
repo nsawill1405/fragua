@@ -13,4 +13,5 @@ TestRunner.run({
 	PreviewCommit = require("./PreviewCommit.spec"),
 	SchemaResolver = require("./SchemaResolver.spec"),
 	TypeEditorLayout = require("./TypeEditorLayout.spec"),
+	InsertFlow = require("./InsertFlow.spec"),
 })

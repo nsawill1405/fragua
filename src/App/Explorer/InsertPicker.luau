@@ -5,6 +5,9 @@ local EngineSchemas = require(script.Parent.Parent.Types.EngineSchemas)
 local IconCatalog = require(script.Parent.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Parent.Types.Registry)
 local TypeEditor = require(script.Parent.Parent.Types.TypeEditor)
+local InsertFlow = require(script.Parent.InsertFlow)
+
+local Workspace = game:GetService("Workspace")
 
 local InsertPicker = {}
 
@@ -460,8 +463,17 @@ function InsertPicker.handleChoice(
 	refresh: () -> ()
 )
 	if choice.kind == "create_type" then
-		TypeEditor.open(host, function(_id)
+		TypeEditor.open(host, function(id)
+			local resolvedParent = InsertFlow.resolveParent(parent, Workspace)
+			local ok, result = pcall(function()
+				return Registry.createInstance(id, resolvedParent)
+			end)
+			if not ok then
+				return false, "Type saved, but insertion failed. Retry insert."
+			end
+			afterInsert(result)
 			refresh()
+			return true
 		end)
 		return
 	end
