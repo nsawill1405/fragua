@@ -1,9 +1,11 @@
+local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local ServerStorage = game:GetService("ServerStorage")
 
 local Constants = require(script.Parent.Parent.Shared.Constants)
 local EngineSchemas = require(script.Parent.EngineSchemas)
+local SchemaMigration = require(script.Parent.SchemaMigration)
 
 export type PropDef = EngineSchemas.PropDef
 
@@ -171,15 +173,61 @@ end
 function Registry.save(def: TypeDef)
 	assert(def.id ~= "", "Type id required")
 	local folder = Registry.typesFolder()
+	local source = typeModuleSource(def)
 	local existing = folder:FindFirstChild(def.id)
-	if existing then
-		existing:Destroy()
+	if existing and existing:IsA("ModuleScript") then
+		existing.Source = source
+	else
+		local module = Instance.new("ModuleScript")
+		module.Name = def.id
+		module.Source = source
+		module.Parent = folder
+		if existing then
+			existing:Destroy()
+		end
 	end
-	local module = Instance.new("ModuleScript")
-	module.Name = def.id
-	module.Source = typeModuleSource(def)
-	module.Parent = folder
+	Registry.ensureBehaviorTemplate(def.id)
 	fireChanged()
+end
+
+function Registry.findInstances(typeId: string): { Instance }
+	local found = {}
+	for _, inst in CollectionService:GetTagged(Constants.TAG) do
+		if inst:GetAttribute(Constants.TYPE_ATTR) == typeId then
+			table.insert(found, inst)
+		end
+	end
+	-- Fallback: attribute without tag (orphaned / older places)
+	for _, serviceName in
+		{
+			"Workspace",
+			"ReplicatedStorage",
+			"ServerStorage",
+			"ServerScriptService",
+			"StarterGui",
+			"StarterPack",
+			"StarterPlayer",
+		}
+	do
+		local ok, service = pcall(function()
+			return game:GetService(serviceName)
+		end)
+		if ok and service then
+			for _, inst in service:GetDescendants() do
+				if inst:GetAttribute(Constants.TYPE_ATTR) == typeId and not table.find(found, inst) then
+					-- Skip the type definition ModuleScripts under ServerStorage.Fragua
+					if not (inst:IsA("ModuleScript") and inst:FindFirstAncestor(Constants.ROOT_FOLDER)) then
+						table.insert(found, inst)
+					end
+				end
+			end
+		end
+	end
+	return found
+end
+
+function Registry.countInstances(typeId: string): number
+	return #Registry.findInstances(typeId)
 end
 
 function Registry.delete(id: string): boolean
@@ -188,9 +236,84 @@ function Registry.delete(id: string): boolean
 	if not existing then
 		return false
 	end
+
+	ChangeHistoryService:SetWaypoint("Fragua Delete Type")
+
+	local placed = Registry.findInstances(id)
+	for _, inst in placed do
+		inst:Destroy()
+	end
+
+	local behaviorTemplate = folder:FindFirstChild(id .. "Behavior")
+	if behaviorTemplate then
+		behaviorTemplate:Destroy()
+	end
+
 	existing:Destroy()
+
+	if #placed > 0 then
+		print(`[Fragua] Deleted type "{id}" and {#placed} placed instance(s).`)
+	else
+		print(`[Fragua] Deleted type "{id}".`)
+	end
+
 	fireChanged()
+	ChangeHistoryService:SetWaypoint("Fragua Delete Type Done")
 	return true
+end
+
+local RESERVED_ATTRS = {
+	Name = true,
+	Archivable = true,
+	[Constants.TYPE_ATTR] = true,
+}
+
+-- Migrate attributes on placed instances after a type schema change.
+function Registry.migrateInstances(typeId: string, previous: TypeDef?, nextDef: TypeDef)
+	local previousResolved = if previous then Registry.resolvedSchema(previous) else {}
+	local nextResolved = Registry.resolvedSchema(nextDef)
+	local migration = SchemaMigration.plan({ properties = previousResolved }, { properties = nextResolved })
+	local oldNames: { [string]: boolean } = {}
+	if previous then
+		for _, prop in previousResolved do
+			oldNames[prop.name] = true
+		end
+	end
+
+	local newProps: { [string]: PropDef } = {}
+	for _, prop in nextResolved do
+		newProps[prop.name] = prop
+	end
+
+	local renameFrom = if migration.rename[1] then migration.rename[1].from else nil
+	local renameTo = if migration.rename[1] then migration.rename[1].to else nil
+
+	ChangeHistoryService:SetWaypoint("Fragua Migrate Type")
+	local count = 0
+	for _, inst in Registry.findInstances(typeId) do
+		count += 1
+		if renameFrom and renameTo then
+			local value = inst:GetAttribute(renameFrom)
+			if value ~= nil then
+				inst:SetAttribute(renameTo, value)
+			end
+			inst:SetAttribute(renameFrom, nil)
+		end
+		for name in pairs(oldNames) do
+			if not newProps[name] and not RESERVED_ATTRS[name] and name ~= renameTo then
+				inst:SetAttribute(name, nil)
+			end
+		end
+		for name, prop in pairs(newProps) do
+			if not RESERVED_ATTRS[name] and inst:GetAttribute(name) == nil then
+				inst:SetAttribute(name, prop.default)
+			end
+		end
+	end
+	if count > 0 then
+		print(`[Fragua] Migrated {count} instance(s) for type "{typeId}".`)
+	end
+	ChangeHistoryService:SetWaypoint("Fragua Migrate Type Done")
 end
 
 local function mergeProps(base: { PropDef }, extra: { PropDef }): { PropDef }
@@ -242,6 +365,31 @@ function Registry.getTypeId(instance: Instance): string?
 	return nil
 end
 
+-- switch an existing fragua instance to another type id
+function Registry.applyType(instance: Instance, typeId: string): boolean
+	local def = Registry.get(typeId)
+	if not def or not Registry.isFraguaInstance(instance) then
+		return false
+	end
+	local prevId = Registry.getTypeId(instance)
+	if prevId == typeId then
+		return true
+	end
+	ChangeHistoryService:SetWaypoint("Fragua Change Type")
+	instance:SetAttribute(Constants.TYPE_ATTR, def.id)
+	CollectionService:AddTag(instance, Constants.TAG)
+	for _, prop in Registry.resolvedSchema(def) do
+		if prop.name ~= "Name" and prop.name ~= "Archivable" and instance:GetAttribute(prop.name) == nil then
+			instance:SetAttribute(prop.name, prop.default)
+		end
+	end
+	Registry.ensureBehaviorTemplate(def.id)
+	Registry.applyBehaviorTemplate(instance, def.id)
+	fireChanged()
+	ChangeHistoryService:SetWaypoint("Fragua Change Type Done")
+	return true
+end
+
 function Registry.createInstance(typeId: string, parent: Instance?): Instance
 	local def = Registry.get(typeId)
 	assert(def, `Unknown Fragua type: {typeId}`)
@@ -257,28 +405,11 @@ function Registry.createInstance(typeId: string, parent: Instance?): Instance
 		end
 	end
 
+	Registry.ensureBehaviorTemplate(def.id)
+
 	local behavior = Instance.new("ModuleScript")
 	behavior.Name = Constants.BEHAVIOR_NAME
-	behavior.Source = table.concat({
-		"-- Fragua edit-time / runtime behavior for " .. def.id,
-		"local Behavior = {}",
-		"",
-		"function Behavior.onCreated(instance)",
-		"\t-- Runs when the instance is created or loaded in Studio edit mode.",
-		"end",
-		"",
-		"function Behavior.onSelected(instance)",
-		"end",
-		"",
-		"function Behavior.onPropertyChanged(instance, key, value)",
-		"end",
-		"",
-		"function Behavior.onAncestryChanged(instance)",
-		"end",
-		"",
-		"return Behavior",
-		"",
-	}, "\n")
+	behavior:SetAttribute("_FraguaInstanceBehavior", true)
 	behavior.Parent = inst
 
 	inst.Parent = parent
@@ -314,6 +445,7 @@ function Registry.seedDefaults()
 		-- behavior is on instances; seed template stored beside type
 		local template = Instance.new("ModuleScript")
 		template.Name = "ZombieBehavior"
+		template:SetAttribute("_FraguaSharedBehavior", true)
 		template.Source = [[
 local Behavior = {}
 
@@ -370,15 +502,72 @@ function Behavior.onAncestryChanged(instance)
 	ensureNameplate(instance)
 end
 
+function Behavior.onStart(instance)
+	ensureNameplate(instance)
+end
+
+function Behavior.onStop(_instance)
+end
+
 return Behavior
 ]]
 		template.Parent = Registry.typesFolder()
 	end
 end
 
-function Registry.getBehaviorSource(typeId: string): string?
+local function defaultBehaviorSource(typeId: string): string
+	return table.concat({
+		"-- Fragua shared behavior for " .. typeId,
+		"-- Edited once; synced to every instance of this type.",
+		"local Behavior = {}",
+		"",
+		"function Behavior.onCreated(instance)",
+		"end",
+		"",
+		"function Behavior.onSelected(instance)",
+		"end",
+		"",
+		"function Behavior.onPropertyChanged(instance, key, value)",
+		"end",
+		"",
+		"function Behavior.onAncestryChanged(instance)",
+		"end",
+		"",
+		"function Behavior.onStart(instance)",
+		"end",
+		"",
+		"function Behavior.onStop(instance)",
+		"end",
+		"",
+		"return Behavior",
+		"",
+	}, "\n")
+end
+
+function Registry.getSharedBehavior(typeId: string): ModuleScript?
 	local template = Registry.typesFolder():FindFirstChild(typeId .. "Behavior")
 	if template and template:IsA("ModuleScript") then
+		return template
+	end
+	return nil
+end
+
+function Registry.ensureBehaviorTemplate(typeId: string): ModuleScript
+	local existing = Registry.getSharedBehavior(typeId)
+	if existing then
+		return existing
+	end
+	local template = Instance.new("ModuleScript")
+	template.Name = typeId .. "Behavior"
+	template.Source = defaultBehaviorSource(typeId)
+	template:SetAttribute("_FraguaSharedBehavior", true)
+	template.Parent = Registry.typesFolder()
+	return template
+end
+
+function Registry.getBehaviorSource(typeId: string): string?
+	local template = Registry.getSharedBehavior(typeId)
+	if template then
 		return template.Source
 	end
 	return nil
@@ -389,6 +578,33 @@ function Registry.applyBehaviorTemplate(instance: Instance, typeId: string)
 	local behavior = instance:FindFirstChild(Constants.BEHAVIOR_NAME)
 	if source and behavior and behavior:IsA("ModuleScript") then
 		behavior.Source = source
+	end
+end
+
+-- Push shared Behavior source onto every placed instance of this type
+function Registry.syncBehaviorToInstances(typeId: string)
+	local source = Registry.getBehaviorSource(typeId)
+	if not source then
+		return
+	end
+	for _, inst in Registry.findInstances(typeId) do
+		local behavior = inst:FindFirstChild(Constants.BEHAVIOR_NAME)
+		if behavior and behavior:IsA("ModuleScript") then
+			behavior.Source = source
+		end
+	end
+end
+
+function Registry.setSharedBehaviorSource(typeId: string, source: string)
+	local template = Registry.ensureBehaviorTemplate(typeId)
+	template.Source = source
+	Registry.syncBehaviorToInstances(typeId)
+	-- notify edit-time host if present (avoid hard require cycle)
+	local ok, Host = pcall(function()
+		return require(script.Parent.Parent.Behaviors.Host)
+	end)
+	if ok and Host and Host.invalidateType then
+		Host.invalidateType(typeId)
 	end
 end
 

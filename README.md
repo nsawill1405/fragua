@@ -16,8 +16,10 @@
 - Type inheritance (`extends` Humanoid or another Fragua type)
 - Icon picker (bundled catalog)
 - Edit-time **Behavior** hooks (`onCreated`, `onSelected`, `onPropertyChanged`, `onAncestryChanged`)
+- Docked **Script Editor** with tabs, dirty/conflict state, search, diagnostics, and lightweight autocomplete
+- Schema-aware suggestions for Luau keywords, behavior hooks, custom types, and custom properties
+- Modern compact controls, reliable pointer capture, hex/RGB color input, and optional interface animations
 - Sample **Zombie** type with a Studio nameplate
-- **Script Editor** toolbar button is deferred (placeholder only)
 
 ## Install (development)
 
@@ -44,7 +46,7 @@ After install you should see a **Fragua** toolbar:
 |--------|--------|
 | Explorer | Toggle Fragua Explorer |
 | Properties | Toggle Fragua Properties |
-| Script Editor | Deferred — shows a “coming later” notice |
+| Script Editor | Toggle the custom Fragua code editor |
 
 ## Custom types
 
@@ -84,7 +86,9 @@ Insert Object → **Delete Type…**. This removes the definition from `ServerSt
 
 ### Behavior hooks
 
-Edit the `Behavior` ModuleScript under a type (or on a placed instance clone):
+Select a custom instance and choose **Edit behavior** in Fragua Properties. Fragua opens the shared type behavior in its custom editor, where autocomplete understands the type's schema and hooks. You can also select a normal Script, LocalScript, or ModuleScript and open it from the Script Editor dock.
+
+Behavior modules use this shape:
 
 ```lua
 local Behavior = {}
@@ -110,6 +114,8 @@ fragua/
     App/
       Explorer/               # tree + Insert Object picker
       Properties/             # property grid
+      ScriptEditor/           # docked editor, autocomplete, diagnostics
+      Settings/               # persisted UI preferences
       Types/                  # registry, schemas, icon picker, type editor
       Behaviors/              # edit-time behavior host
       Shared/                 # theme, constants, util
@@ -119,7 +125,7 @@ fragua/
 ## Limits
 
 - Not full Studio Explorer / Properties parity
-- Script Editor not implemented yet
+- The custom editor intentionally provides lightweight completion and diagnostics rather than the full native Studio language server
 - Custom types are Fragua-surface only; gameplay should read attributes / your own runtime loader
 - Deleting a type does not bulk-delete placed instances
 

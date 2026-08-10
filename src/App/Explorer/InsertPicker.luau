@@ -1,5 +1,6 @@
 local Theme = require(script.Parent.Parent.Shared.Theme)
 local UiUtil = require(script.Parent.Parent.Shared.UiUtil)
+local SettingsStore = require(script.Parent.Parent.Settings.Store)
 local EngineSchemas = require(script.Parent.Parent.Types.EngineSchemas)
 local IconCatalog = require(script.Parent.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Parent.Types.Registry)
@@ -11,6 +12,7 @@ export type InsertChoice =
 	{ kind: "engine", className: string }
 	| { kind: "custom", typeId: string }
 	| { kind: "create_type" }
+	| { kind: "edit_type", typeId: string }
 
 local creatableCache: { [string]: boolean } = {}
 local function canCreateClass(className: string): boolean
@@ -80,7 +82,7 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 	end)
 
 	local search = Instance.new("TextBox")
-	search.PlaceholderText = "Search…"
+	search.PlaceholderText = "Search..."
 	search.ClearTextOnFocus = false
 	search.Text = ""
 	search.Font = Theme.font
@@ -129,6 +131,7 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		iconId: string?,
 		order: number,
 		onClick: () -> (),
+		onEdit: (() -> ())?,
 		onDelete: (() -> ())?,
 	})
 		local btn = Instance.new("TextButton")
@@ -146,6 +149,14 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		rc.CornerRadius = UDim.new(0, 4)
 		rc.Parent = btn
 
+		local rightPad = 12
+		if opts.onDelete then
+			rightPad += 20
+		end
+		if opts.onEdit then
+			rightPad += 28
+		end
+
 		if opts.iconId then
 			local icon = IconCatalog.createIconWidget(btn, opts.iconId, 14)
 			icon.Position = UDim2.fromOffset(8, 5)
@@ -155,7 +166,7 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		local text = Instance.new("TextLabel")
 		text.BackgroundTransparency = 1
 		text.Position = UDim2.fromOffset(if opts.iconId then 28 else 10, 0)
-		text.Size = UDim2.new(1, if opts.onDelete then -48 else -32, 1, 0)
+		text.Size = UDim2.new(1, -rightPad - (if opts.iconId then 28 else 10), 1, 0)
 		text.Font = Theme.font
 		text.TextSize = 13
 		text.TextXAlignment = Enum.TextXAlignment.Left
@@ -166,16 +177,17 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		text.Active = false
 		text.Parent = btn
 
+		local xOffset = 6
 		if opts.onDelete then
 			local del = Instance.new("TextButton")
 			del.AutoButtonColor = false
 			del.BackgroundTransparency = 1
 			del.AnchorPoint = Vector2.new(1, 0.5)
-			del.Position = UDim2.new(1, -6, 0.5, 0)
+			del.Position = UDim2.new(1, -xOffset, 0.5, 0)
 			del.Size = UDim2.fromOffset(18, 18)
 			del.Font = Enum.Font.GothamBold
 			del.TextSize = 14
-			del.Text = "×"
+			del.Text = "x"
 			del.TextColor3 = Theme.textMuted
 			del.ZIndex = 46
 			del.Parent = btn
@@ -187,6 +199,31 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 			end)
 			del.MouseButton1Click:Connect(function()
 				opts.onDelete()
+			end)
+			xOffset += 20
+		end
+
+		if opts.onEdit then
+			local edit = Instance.new("TextButton")
+			edit.AutoButtonColor = false
+			edit.BackgroundTransparency = 1
+			edit.AnchorPoint = Vector2.new(1, 0.5)
+			edit.Position = UDim2.new(1, -xOffset, 0.5, 0)
+			edit.Size = UDim2.fromOffset(28, 18)
+			edit.Font = Theme.font
+			edit.TextSize = 11
+			edit.Text = "Edit"
+			edit.TextColor3 = Theme.textMuted
+			edit.ZIndex = 46
+			edit.Parent = btn
+			edit.MouseEnter:Connect(function()
+				edit.TextColor3 = Theme.accent
+			end)
+			edit.MouseLeave:Connect(function()
+				edit.TextColor3 = Theme.textMuted
+			end)
+			edit.MouseButton1Click:Connect(function()
+				opts.onEdit()
 			end)
 		end
 
@@ -205,7 +242,7 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		header.AutoButtonColor = false
 		header.BackgroundColor3 = Theme.section
 		header.BorderSizePixel = 0
-		header.Size = UDim2.new(1, -8, 0, 22)
+		header.Size = UDim2.new(1, -8, 0, 24)
 		header.Text = ""
 		header.LayoutOrder = order
 		header.ZIndex = 43
@@ -219,16 +256,9 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		accent.ZIndex = 44
 		accent.Parent = header
 
-		local twist = Instance.new("TextLabel")
-		twist.BackgroundTransparency = 1
-		twist.Position = UDim2.fromOffset(10, 0)
-		twist.Size = UDim2.fromOffset(14, 22)
-		twist.Font = Enum.Font.GothamBold
-		twist.TextSize = 11
-		twist.TextColor3 = Theme.textMuted
-		twist.Text = if collapsed then ">" else "v"
+		local twist = UiUtil.makeChevron(header, not collapsed, 14)
+		twist.Position = UDim2.fromOffset(8, 5)
 		twist.ZIndex = 44
-		twist.Parent = header
 
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
@@ -242,7 +272,11 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 		label.ZIndex = 44
 		label.Parent = header
 
-		header.MouseButton1Click:Connect(onToggle)
+		header.MouseButton1Click:Connect(function()
+			local nextExpanded = collapsed -- currently collapsed, so expand
+			UiUtil.setChevronExpanded(twist, nextExpanded, true)
+			task.delay(0.05, onToggle)
+		end)
 	end
 
 	local function rebuild(filter: string)
@@ -270,7 +304,7 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 
 		if showSection("Custom") then
 			row({
-				label = "Create New Type…",
+				label = "Create New Type...",
 				iconId = "emoji_plus",
 				order = order,
 				onClick = function()
@@ -292,9 +326,67 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 							overlay:Destroy()
 							onChoose({ kind = "custom", typeId = typeId })
 						end,
+						onEdit = function()
+							overlay:Destroy()
+							onChoose({ kind = "edit_type", typeId = typeId })
+						end,
 						onDelete = function()
-							Registry.delete(typeId)
-							rebuild(search.Text)
+							local count = Registry.countInstances(typeId)
+							local function doDelete()
+								Registry.delete(typeId)
+								rebuild(search.Text)
+							end
+							if count > 0 and SettingsStore.getConfirmOnDelete() then
+								local confirm = Instance.new("Frame")
+								confirm.Name = "DeleteConfirm"
+								confirm.BackgroundColor3 = Color3.new(0, 0, 0)
+								confirm.BackgroundTransparency = 0.45
+								confirm.Size = UDim2.fromScale(1, 1)
+								confirm.ZIndex = 80
+								confirm.Parent = overlay
+
+								local box = Instance.new("Frame")
+								box.AnchorPoint = Vector2.new(0.5, 0.5)
+								box.Position = UDim2.fromScale(0.5, 0.5)
+								box.Size = UDim2.fromOffset(260, 120)
+								box.BackgroundColor3 = Theme.bg
+								box.BorderSizePixel = 0
+								box.ZIndex = 81
+								box.Parent = confirm
+								local bc = Instance.new("UICorner")
+								bc.CornerRadius = UDim.new(0, 8)
+								bc.Parent = box
+
+								local msg = Instance.new("TextLabel")
+								msg.BackgroundTransparency = 1
+								msg.Position = UDim2.fromOffset(12, 12)
+								msg.Size = UDim2.new(1, -24, 0, 48)
+								msg.Font = Theme.font
+								msg.TextSize = 13
+								msg.TextWrapped = true
+								msg.TextColor3 = Theme.textBright
+								msg.Text = `Delete type "{typeId}" and {count} placed instance(s)?`
+								msg.ZIndex = 82
+								msg.Parent = box
+
+								local cancel = Theme.makeButton(box, "Cancel", { Size = UDim2.fromOffset(80, 28) })
+								cancel.Position = UDim2.new(1, -180, 1, -40)
+								cancel.ZIndex = 82
+								cancel.MouseButton1Click:Connect(function()
+									confirm:Destroy()
+								end)
+
+								local okBtn = Theme.makeButton(box, "Delete", { Size = UDim2.fromOffset(80, 28) })
+								okBtn.Position = UDim2.new(1, -90, 1, -40)
+								okBtn.BackgroundColor3 = Theme.danger
+								okBtn.ZIndex = 82
+								okBtn.MouseButton1Click:Connect(function()
+									confirm:Destroy()
+									doDelete()
+								end)
+							else
+								doDelete()
+							end
 						end,
 					})
 					order += 1
@@ -371,6 +463,12 @@ function InsertPicker.handleChoice(
 		TypeEditor.open(host, function(_id)
 			refresh()
 		end)
+		return
+	end
+	if choice.kind == "edit_type" then
+		TypeEditor.open(host, function(_id)
+			refresh()
+		end, choice.typeId)
 		return
 	end
 	if not parent then

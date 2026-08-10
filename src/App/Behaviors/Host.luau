@@ -23,11 +23,23 @@ local function loadBehavior(instance: Instance)
 	if loaded[instance] then
 		return loaded[instance]
 	end
+	-- keep instance Behavior Source in sync with shared template
+	local typeId = Registry.getTypeId(instance)
+	if typeId then
+		Registry.applyBehaviorTemplate(instance, typeId)
+	end
 	local module = instance:FindFirstChild(Constants.BEHAVIOR_NAME)
 	if not module or not module:IsA("ModuleScript") then
 		return nil
 	end
-	local ok, result = pcall(require, module)
+	-- loadstring so shared Behavior edits hot-reload in edit mode (require caches)
+	local source = module.Source
+	local chunk, err = loadstring(source, instance:GetFullName() .. ".Behavior")
+	if not chunk then
+		warn(`[Fragua] Failed to compile behavior for {instance:GetFullName()}: {err}`)
+		return nil
+	end
+	local ok, result = pcall(chunk)
 	if not ok or typeof(result) ~= "table" then
 		warn(`[Fragua] Failed to load behavior for {instance:GetFullName()}: {result}`)
 		return nil
@@ -51,20 +63,39 @@ local function watch(instance: Instance)
 		return
 	end
 	local cons = {}
-	table.insert(cons, instance.AncestryChanged:Connect(function()
-		if not instance:IsDescendantOf(game) then
-			unload(instance)
-			return
-		end
-		callHook(instance, "onAncestryChanged")
-	end))
-	table.insert(cons, instance.AttributeChanged:Connect(function(attr)
-		if attr ~= Constants.TYPE_ATTR then
-			callHook(instance, "onPropertyChanged", attr, instance:GetAttribute(attr))
-		end
-	end))
+	table.insert(
+		cons,
+		instance.AncestryChanged:Connect(function()
+			if not instance:IsDescendantOf(game) then
+				unload(instance)
+				return
+			end
+			callHook(instance, "onAncestryChanged")
+		end)
+	)
+	table.insert(
+		cons,
+		instance.AttributeChanged:Connect(function(attr)
+			if attr ~= Constants.TYPE_ATTR then
+				callHook(instance, "onPropertyChanged", attr, instance:GetAttribute(attr))
+			end
+		end)
+	)
 	connections[instance] = cons
 	callHook(instance, "onCreated")
+end
+
+function Host.invalidateType(typeId: string)
+	for inst in pairs(loaded) do
+		if Registry.getTypeId(inst) == typeId then
+			unload(inst)
+		end
+	end
+	for _, inst in CollectionService:GetTagged(Constants.TAG) do
+		if Registry.getTypeId(inst) == typeId then
+			watch(inst)
+		end
+	end
 end
 
 function Host.start()
