@@ -8,6 +8,7 @@ local IconCatalog = require(script.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Types.Registry)
 local EngineProps = require(script.EngineProps)
 local Controls = require(script.Controls)
+local MetadataEditor = require(script.MetadataEditor)
 local PropertyRefreshPolicy = require(script.PropertyRefreshPolicy)
 
 local Properties = {}
@@ -28,6 +29,7 @@ local CATEGORY_ORDER = {
 	"Streaming",
 	"Celestial",
 	"Fog",
+	"Tags",
 	"Attributes",
 }
 
@@ -414,6 +416,8 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 
 			local byCategory: { [string]: { any } } = {}
 			local categories: { string } = {}
+			local schemaNames: { [string]: boolean } = {}
+			local isFragua = Registry.isFraguaInstance(current)
 
 			local function push(cat: string, row: any)
 				if not byCategory[cat] then
@@ -423,7 +427,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				table.insert(byCategory[cat], row)
 			end
 
-			if Registry.isFraguaInstance(current) then
+			if isFragua then
 				local typeId = Registry.getTypeId(current)
 				local def = typeId and Registry.get(typeId)
 				local classLabel = if def then def.name else (typeId or "Unknown")
@@ -459,6 +463,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				if def then
 					for _, prop in Registry.resolvedSchema(def) do
 						if prop.name ~= "Name" and prop.name ~= "Archivable" then
+							schemaNames[prop.name] = true
 							local value = current:GetAttribute(prop.name)
 							if value == nil then
 								value = prop.default
@@ -588,34 +593,18 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 						changeKind = "property",
 					})
 				end
-
-				local attrs = current:GetAttributes()
-				local attrNames = {}
-				for name in attrs do
-					if name ~= "_FraguaType" then
-						table.insert(attrNames, name)
-					end
-				end
-				table.sort(attrNames)
-				for _, name in attrNames do
-					local value = attrs[name]
-					local captured = name
-					push("Attributes", {
-						name = name,
-						valueType = Util.attributeTypeName(value),
-						value = value,
-						onCommit = function(v)
-							current:SetAttribute(captured, v)
-						end,
-						onPreview = function(v)
-							previewingAttributes[captured] = true
-							current:SetAttribute(captured, v)
-							previewingAttributes[captured] = nil
-						end,
-						changeKind = "attribute",
-					})
-				end
 			end
+
+			MetadataEditor.appendRows({
+				instance = current,
+				host = root,
+				push = push,
+				schemaNames = schemaNames,
+				isFragua = isFragua,
+				requestRebuild = function()
+					task.defer(rebuild)
+				end,
+			})
 
 			local order = 1
 			for _, cat in sortCategories(categories) do
@@ -664,6 +653,14 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					end
 				end)
 			)
+			pcall(function()
+				table.insert(
+					conns,
+					selected:GetPropertyChangedSignal("Tags"):Connect(function()
+						task.defer(rebuild)
+					end)
+				)
+			end)
 			table.insert(
 				conns,
 				selected.AttributeChanged:Connect(function(attributeName)
