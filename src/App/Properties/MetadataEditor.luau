@@ -41,7 +41,7 @@ local function closeOverlay(overlay: Instance)
 	end
 end
 
-local function makeDialog(host: GuiObject, titleText: string, height: number)
+local function makeDialog(host: GuiObject, titleText: string, height: number, hasDelete: boolean)
 	local layers = MetadataModel.modalLayers(150)
 	local overlay = Instance.new("Frame")
 	overlay.Name = "MetadataDialog"
@@ -54,10 +54,6 @@ local function makeDialog(host: GuiObject, titleText: string, height: number)
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.fromOffset(
-		math.min(math.max(host.AbsoluteSize.X - 24, 1), 360),
-		math.min(math.max(host.AbsoluteSize.Y - 16, 1), height)
-	)
 	panel.BackgroundColor3 = Theme.bg
 	panel.BorderSizePixel = 0
 	panel.ZIndex = layers.panel
@@ -107,20 +103,44 @@ local function makeDialog(host: GuiObject, titleText: string, height: number)
 	errorLabel.Parent = panel
 
 	local cancel = Theme.makeButton(panel, "Cancel", { Size = UDim2.fromOffset(72, 28) })
-	cancel.AnchorPoint = Vector2.new(1, 1)
-	cancel.Position = UDim2.new(1, -92, 1, -12)
+	cancel.AnchorPoint = Vector2.new(0, 1)
 	cancel.ZIndex = layers.panel + 1
 	cancel.MouseButton1Click:Connect(function()
 		closeOverlay(overlay)
 	end)
 
 	local save = Theme.makeButton(panel, "Save", { Size = UDim2.fromOffset(72, 28) })
-	save.AnchorPoint = Vector2.new(1, 1)
-	save.Position = UDim2.new(1, -12, 1, -12)
+	save.AnchorPoint = Vector2.new(0, 1)
 	save.BackgroundColor3 = Theme.accent
 	save.ZIndex = layers.panel + 1
 
-	return overlay, panel, content, errorLabel, save, layers
+	local deleteButton = nil
+	if hasDelete then
+		deleteButton = Theme.makeButton(panel, "Delete", { Size = UDim2.fromOffset(72, 28) })
+		deleteButton.AnchorPoint = Vector2.new(0, 1)
+		deleteButton.TextColor3 = Theme.danger
+		deleteButton.ZIndex = layers.panel + 1
+	end
+
+	local function applyGeometry()
+		local geometry = MetadataModel.dialogGeometry(host.AbsoluteSize.X, host.AbsoluteSize.Y, height, hasDelete)
+		panel.Size = UDim2.fromOffset(geometry.panel.width, geometry.panel.height)
+		cancel.Position = UDim2.new(0, geometry.cancelButton.x, 1, -12)
+		cancel.Size = UDim2.fromOffset(geometry.cancelButton.width, 28)
+		save.Position = UDim2.new(0, geometry.saveButton.x, 1, -12)
+		save.Size = UDim2.fromOffset(geometry.saveButton.width, 28)
+		if deleteButton and geometry.deleteButton then
+			deleteButton.Position = UDim2.new(0, geometry.deleteButton.x, 1, -12)
+			deleteButton.Size = UDim2.fromOffset(geometry.deleteButton.width, 28)
+		end
+	end
+	applyGeometry()
+	local resizeConnection = host:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyGeometry)
+	overlay.Destroying:Connect(function()
+		resizeConnection:Disconnect()
+	end)
+
+	return overlay, panel, content, errorLabel, save, deleteButton, layers
 end
 
 local function makeLabel(panel: GuiObject, text: string, y: number)
@@ -159,7 +179,7 @@ local function makeBox(panel: GuiObject, y: number, text: string, placeholder: s
 end
 
 local function openTagDialog(host: GuiObject, instance: Instance, requestRebuild: () -> ())
-	local overlay, _, content, errorLabel, save = makeDialog(host, "Add Tag", 150)
+	local overlay, _, content, errorLabel, save = makeDialog(host, "Add Tag", 150, false)
 	makeLabel(content, "Tag name", 4)
 	local nameBox = makeBox(content, 20, "", "Enemy")
 	save.Text = "Add"
@@ -192,8 +212,9 @@ local function openAttributeDialog(host: GuiObject, instance: Instance, previous
 	local originalType = if previousValue ~= nil then attributeType(previousValue) else nil
 	local selectedType = originalType or "string"
 	local startingValue = if previousValue ~= nil then previousValue else MetadataModel.defaultFor(selectedType)
-	local overlay, panel, content, errorLabel, save, layers =
-		makeDialog(host, if previousName then "Edit Attribute" else "Add Attribute", 260)
+	local canDelete = previousName ~= nil and not MetadataModel.isProtectedAttribute(previousName)
+	local overlay, _, content, errorLabel, save, deleteButton, layers =
+		makeDialog(host, if previousName then "Edit Attribute" else "Add Attribute", 260, canDelete)
 
 	makeLabel(content, "Name", 4)
 	local nameBox = makeBox(content, 20, previousName or "", "Score")
@@ -225,12 +246,7 @@ local function openAttributeDialog(host: GuiObject, instance: Instance, previous
 	end, nil, { host = overlay, zIndex = layers.menu })
 	typeButton.Size = UDim2.fromScale(1, 1)
 	typeButton.ZIndex = 153
-	if previousName and not MetadataModel.isProtectedAttribute(previousName) then
-		local deleteButton = Theme.makeButton(panel, "Delete", { Size = UDim2.fromOffset(72, 28) })
-		deleteButton.AnchorPoint = Vector2.new(0, 1)
-		deleteButton.Position = UDim2.new(0, 12, 1, -12)
-		deleteButton.TextColor3 = Theme.danger
-		deleteButton.ZIndex = 152
+	if previousName and deleteButton then
 		deleteButton.MouseButton1Click:Connect(function()
 			if
 				safeMutation(instance, "Fragua Delete Attribute", function()
@@ -363,14 +379,6 @@ function MetadataEditor.appendRows(context)
 				safeMutation(instance, "Fragua Attribute", function()
 					instance:SetAttribute(capturedName, nextValue)
 				end, nil)
-			end,
-			onPreview = function(nextValue)
-				if instance:IsDescendantOf(game) then
-					local ok, err = pcall(instance.SetAttribute, instance, capturedName, nextValue)
-					if not ok then
-						warn(`[Fragua] Attribute preview: {tostring(err)}`)
-					end
-				end
 			end,
 			changeKind = "attribute",
 		})

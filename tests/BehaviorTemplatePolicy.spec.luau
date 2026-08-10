@@ -33,4 +33,9 @@ return {
 		)
 		assert(Policy.backupFolderName({ BehaviorBackups = "Folder" }) == "BehaviorBackups")
 	end,
+	["clean hierarchy uses the canonical backup folder name"] = function()
+		assert(ok and Policy, "BehaviorTemplatePolicy should be available")
+		assert(Policy.backupFolderName, "backupFolderName should be available")
+		assert(Policy.backupFolderName({}) == "BehaviorBackups")
+	end,
 }
