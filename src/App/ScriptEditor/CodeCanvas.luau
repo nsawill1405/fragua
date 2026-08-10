@@ -3,6 +3,7 @@ local UserInputService = game:GetService("UserInputService")
 local Theme = require(script.Parent.Parent.Shared.Theme)
 local CompletionEngine = require(script.Parent.CompletionEngine)
 local Diagnostics = require(script.Parent.Diagnostics)
+local EditorLayout = require(script.Parent.EditorLayout)
 
 local CodeCanvas = {}
 
@@ -20,18 +21,36 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	root.ClipsDescendants = true
 	root.Parent = parent
 
+	local viewport = Instance.new("ScrollingFrame")
+	viewport.Name = "Viewport"
+	viewport.BackgroundTransparency = 1
+	viewport.BorderSizePixel = 0
+	viewport.Size = UDim2.fromScale(1, 1)
+	viewport.CanvasSize = UDim2.new()
+	viewport.ScrollBarThickness = 6
+	viewport.ScrollBarImageColor3 = Theme.borderLight
+	viewport.ScrollingDirection = Enum.ScrollingDirection.XY
+	viewport.Parent = root
+
+	local content = Instance.new("Frame")
+	content.Name = "Content"
+	content.BackgroundTransparency = 1
+	content.BorderSizePixel = 0
+	content.Size = UDim2.fromScale(1, 1)
+	content.Parent = viewport
+
 	local gutter = Instance.new("TextLabel")
 	gutter.Name = "Gutter"
 	gutter.BackgroundColor3 = Theme.bgDeep
 	gutter.BorderSizePixel = 0
-	gutter.Size = UDim2.new(0, 40, 1, 0)
+	gutter.Size = UDim2.new(0, 44, 1, 0)
 	gutter.Font = Theme.fontMono
 	gutter.TextSize = 12
 	gutter.TextColor3 = Theme.textMuted
 	gutter.TextXAlignment = Enum.TextXAlignment.Right
 	gutter.TextYAlignment = Enum.TextYAlignment.Top
 	gutter.Text = "1"
-	gutter.Parent = root
+	gutter.Parent = content
 	local gutterPadding = Instance.new("UIPadding")
 	gutterPadding.PaddingTop = UDim.new(0, 10)
 	gutterPadding.PaddingRight = UDim.new(0, 8)
@@ -41,9 +60,9 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	divider.BackgroundColor3 = Theme.borderLight
 	divider.BackgroundTransparency = 0.55
 	divider.BorderSizePixel = 0
-	divider.Position = UDim2.fromOffset(40, 0)
+	divider.Position = UDim2.fromOffset(44, 0)
 	divider.Size = UDim2.new(0, 1, 1, 0)
-	divider.Parent = root
+	divider.Parent = content
 
 	local editor = Instance.new("TextBox")
 	editor.Name = "Editor"
@@ -58,10 +77,10 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	editor.TextColor3 = Theme.textBright
 	editor.BackgroundTransparency = 1
 	editor.BorderSizePixel = 0
-	editor.Position = UDim2.fromOffset(41, 0)
-	editor.Size = UDim2.new(1, -41, 1, 0)
+	editor.Position = UDim2.fromOffset(45, 0)
+	editor.Size = UDim2.new(1, -45, 1, 0)
 	editor.Text = ""
-	editor.Parent = root
+	editor.Parent = content
 	local editorPadding = Instance.new("UIPadding")
 	editorPadding.PaddingTop = UDim.new(0, 10)
 	editorPadding.PaddingBottom = UDim.new(0, 10)
@@ -91,6 +110,23 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	local suggestions = {}
 	local selectedIndex = 1
 	local suppressChange = false
+	local metrics = {
+		charWidth = 7.8,
+		lineHeight = 18,
+		gutterWidth = 44,
+		padX = 12,
+		padY = 10,
+	}
+
+	local function updateCanvas()
+		local viewportSize = viewport.AbsoluteSize
+		local size = EditorLayout.measure(editor.Text, viewportSize.X, viewportSize.Y, metrics)
+		content.Size = UDim2.fromOffset(size.width, size.height)
+		viewport.CanvasSize = UDim2.fromOffset(size.width, size.height)
+		gutter.Size = UDim2.fromOffset(metrics.gutterWidth, size.height)
+		divider.Size = UDim2.fromOffset(1, size.height)
+		editor.Size = UDim2.fromOffset(math.max(1, size.width - 45), size.height)
+	end
 
 	local function updateGutter()
 		local lineCount = 1
@@ -102,17 +138,7 @@ function CodeCanvas.mount(parent: GuiObject, options)
 			lines[line] = tostring(line)
 		end
 		gutter.Text = table.concat(lines, "\n")
-	end
-
-	local function caretPosition(): (number, number)
-		local cursor = math.max(editor.CursorPosition, 1)
-		local before = editor.Text:sub(1, cursor - 1)
-		local line = 0
-		for _ in before:gmatch("\n") do
-			line += 1
-		end
-		local columnText = before:match("([^\n]*)$") or ""
-		return 54 + #columnText * 7.8, 12 + (line + 1) * 18
+		updateCanvas()
 	end
 
 	local function clearPopupRows()
@@ -134,10 +160,17 @@ function CodeCanvas.mount(parent: GuiObject, options)
 		selectedIndex = math.clamp(selectedIndex, 1, #suggestions)
 		local visibleCount = math.min(#suggestions, 7)
 		popup.Size = UDim2.fromOffset(math.min(300, math.max(200, root.AbsoluteSize.X - 16)), visibleCount * 34)
-		local caretX, caretY = caretPosition()
-		local maxX = math.max(4, root.AbsoluteSize.X - popup.Size.X.Offset - 4)
-		local maxY = math.max(4, root.AbsoluteSize.Y - popup.Size.Y.Offset - 4)
-		popup.Position = UDim2.fromOffset(math.clamp(caretX, 4, maxX), math.clamp(caretY, 4, maxY))
+		local caret = EditorLayout.caretPoint(editor.Text, math.max(editor.CursorPosition, 1), metrics)
+		local popupPoint = EditorLayout.popupPoint(
+			caret,
+			viewport.CanvasPosition.X,
+			viewport.CanvasPosition.Y,
+			viewport.AbsoluteSize.X,
+			viewport.AbsoluteSize.Y,
+			popup.Size.X.Offset,
+			popup.Size.Y.Offset
+		)
+		popup.Position = UDim2.fromOffset(popupPoint.x, popupPoint.y)
 		popup.Visible = true
 
 		for index = 1, visibleCount do
@@ -211,6 +244,12 @@ function CodeCanvas.mount(parent: GuiObject, options)
 	editor.FocusLost:Connect(function()
 		popup.Visible = false
 	end)
+	viewport:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+		if popup.Visible then
+			renderPopup()
+		end
+	end)
+	root:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateCanvas)
 
 	local inputConnection = UserInputService.InputBegan:Connect(function(input)
 		if not editor:IsFocused() then
