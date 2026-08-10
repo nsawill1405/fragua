@@ -22,8 +22,11 @@ function Controls.enumDropdown(
 	btn.TextSize = 12
 	btn.TextColor3 = Theme.textBright
 	btn.TextXAlignment = Enum.TextXAlignment.Left
-	btn.Text = "  " .. current .. "  v"
+	btn.TextTruncate = Enum.TextTruncate.AtEnd
+	btn.Text = "  " .. current
 	btn.Parent = parent
+	local arrow = UiUtil.makeChevron(btn, true, 12)
+	arrow.Position = UDim2.new(1, -17, 0.5, -6)
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 4)
@@ -128,7 +131,13 @@ function Controls.enumDropdown(
 	return btn
 end
 
-function Controls.numberField(parent: GuiObject, value: number, onCommit: (number) -> (), range: { number }?): Frame
+function Controls.numberField(
+	parent: GuiObject,
+	value: number,
+	onCommit: (number) -> (),
+	range: { number }?,
+	onPreview: ((number) -> ())?
+): (Frame, (number) -> ())
 	local minV = if range then range[1] else nil
 	local maxV = if range then range[2] else nil
 	if minV == nil or maxV == nil then
@@ -214,11 +223,13 @@ function Controls.numberField(parent: GuiObject, value: number, onCommit: (numbe
 	kc.Parent = knob
 
 	local working = value
-	local transaction = PreviewCommit.new(value)
+	local transaction = PreviewCommit.new(value, onPreview)
 
-	local function paint(n: number)
+	local function paint(n: number, sendPreview: boolean?)
 		working = math.clamp(n, minV :: number, maxV :: number)
-		PreviewCommit.preview(transaction, working)
+		if sendPreview ~= false then
+			PreviewCommit.preview(transaction, working)
+		end
 		local span = (maxV :: number) - (minV :: number)
 		local alpha = if span == 0 then 0 else math.clamp((working - (minV :: number)) / span, 0, 1)
 		fill.Size = UDim2.fromScale(alpha, 1)
@@ -226,7 +237,7 @@ function Controls.numberField(parent: GuiObject, value: number, onCommit: (numbe
 		box.Text = string.format(" %.3g", working)
 	end
 
-	paint(value)
+	paint(value, false)
 
 	local function commit(n: number)
 		paint(n)
@@ -250,8 +261,8 @@ function Controls.numberField(parent: GuiObject, value: number, onCommit: (numbe
 			end,
 			onFinish = function(_, _, cancelled)
 				if cancelled then
-					paint(PreviewCommit.cancel(transaction))
-				elseif working ~= value then
+					paint(PreviewCommit.cancel(transaction), false)
+				elseif working ~= transaction.original then
 					onCommit(PreviewCommit.commit(transaction))
 				end
 			end,
@@ -267,10 +278,21 @@ function Controls.numberField(parent: GuiObject, value: number, onCommit: (numbe
 		end
 	end)
 
-	return holder
+	return holder,
+		function(nextValue)
+			paint(nextValue, false)
+			transaction.original = working
+			transaction.current = working
+			transaction.committed = false
+		end
 end
 
-function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3) -> ()): Frame
+function Controls.colorField(
+	parent: GuiObject,
+	value: Color3,
+	onCommit: (Color3) -> (),
+	onPreview: ((Color3) -> ())?
+): (Frame, (Color3) -> ())
 	local holder = Instance.new("Frame")
 	holder.BackgroundTransparency = 1
 	holder.BorderSizePixel = 0
@@ -311,10 +333,15 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 	hc.CornerRadius = UDim.new(0, 4)
 	hc.Parent = hex
 
+	local function paintField(c: Color3)
+		swatch.BackgroundColor3 = c
+		hex.Text = " " .. ColorText.format(c.R, c.G, c.B)
+	end
+
 	local function openPicker()
 		local host = UiUtil.dockHost(parent)
 		local original = swatch.BackgroundColor3
-		local transaction = PreviewCommit.new(original)
+		local transaction = PreviewCommit.new(original, onPreview)
 
 		local overlay = Instance.new("Frame")
 		overlay.Name = "ColorPicker"
@@ -381,7 +408,6 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 
 		local h, s, v = original:ToHSV()
 		local working = original
-		local refreshGeneration = 0
 
 		local preview = Instance.new("Frame")
 		preview.Position = UDim2.fromOffset(12, 42)
@@ -507,26 +533,14 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 		hueHit.ZIndex = 127
 		hueHit.Parent = hueBar
 
-		local function paintField(c: Color3)
-			swatch.BackgroundColor3 = c
-			hex.Text = " " .. ColorText.format(c.R, c.G, c.B)
-		end
-
 		local function refresh()
 			working = Color3.fromHSV(h, s, v)
 			PreviewCommit.preview(transaction, working)
-			refreshGeneration += 1
-			local generation = refreshGeneration
-			task.defer(function()
-				if generation ~= refreshGeneration or not panel.Parent then
-					return
-				end
-				preview.BackgroundColor3 = working
-				sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-				cursor.Position = UDim2.fromScale(s, 1 - v)
-				hueKnob.Position = UDim2.fromScale(0.5, h)
-				paintField(working)
-			end)
+			preview.BackgroundColor3 = working
+			sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+			cursor.Position = UDim2.fromScale(s, 1 - v)
+			hueKnob.Position = UDim2.fromScale(0.5, h)
+			paintField(working)
 		end
 
 		-- Pick using overlay-local coordinates (AbsolutePosition deltas are PluginGui-safe).
@@ -615,7 +629,7 @@ function Controls.colorField(parent: GuiObject, value: Color3, onCommit: (Color3
 		end
 	end)
 
-	return holder
+	return holder, paintField
 end
 
 return Controls

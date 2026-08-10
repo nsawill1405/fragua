@@ -60,7 +60,8 @@ function UiUtil.makeChevron(parent: Instance, expanded: boolean, size: number?):
 		line.BorderSizePixel = 0
 		line.Position = UDim2.fromScale(0.5, if direction == -1 then 0.37 else 0.63)
 		line.Size = UDim2.fromOffset(math.max(5, px - 8), 1)
-		line.Rotation = 45 * direction
+		-- A collapsed chevron points right; rotating the container 90 degrees opens it downward.
+		line.Rotation = -45 * direction
 		line.Parent = twist
 	end
 	return twist

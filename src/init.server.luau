@@ -26,7 +26,7 @@ explorerBtn.ClickableWhenViewportHidden = true
 local propertiesBtn = toolbar:CreateButton(
 	"FraguaProperties",
 	"Open Fragua Properties",
-	"rbxasset://textures/StudioSharedUI/attributes_icon.png",
+	"rbxasset://textures/StudioToolbox/Tabs/Inventory.png",
 	"Properties"
 )
 propertiesBtn.ClickableWhenViewportHidden = true
@@ -34,7 +34,7 @@ propertiesBtn.ClickableWhenViewportHidden = true
 local scriptBtn = toolbar:CreateButton(
 	"FraguaScriptEditor",
 	"Open Fragua Script Editor",
-	"rbxasset://textures/Debugger/Breakpoints/Breakpoint.png",
+	"rbxasset://textures/StudioToolbox/Tabs/Inventory.png",
 	"Script Editor"
 )
 scriptBtn.ClickableWhenViewportHidden = true
