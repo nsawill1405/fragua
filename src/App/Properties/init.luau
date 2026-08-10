@@ -254,11 +254,13 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		end
 
 		if valueType == "boolean" and not readonly then
+			local displayValue = value == true
+			local animationToken = 0
 			local toggle = Instance.new("TextButton")
 			toggle.AutoButtonColor = false
 			toggle.Size = UDim2.fromOffset(36, 18)
 			toggle.Position = UDim2.fromOffset(0, 1)
-			toggle.BackgroundColor3 = if value then Theme.accent else Theme.inputBg
+			toggle.BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg
 			toggle.BorderSizePixel = 0
 			toggle.Text = ""
 			toggle.Parent = valueParent
@@ -267,7 +269,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			tc.Parent = toggle
 			local knob = Instance.new("Frame")
 			knob.Size = UDim2.fromOffset(14, 14)
-			knob.Position = if value then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2)
+			knob.Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2)
 			knob.BackgroundColor3 = Theme.textBright
 			knob.BorderSizePixel = 0
 			knob.Parent = toggle
@@ -275,8 +277,22 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			kc.CornerRadius = UDim.new(1, 0)
 			kc.Parent = knob
 			toggle.MouseButton1Click:Connect(function()
-				ChangeHistoryService:SetWaypoint("Fragua Property")
-				prop.onCommit(not value)
+				displayValue = not displayValue
+				animationToken += 1
+				local token = animationToken
+				local trackTween = Theme.play(toggle, "boolean-track", {
+					BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg,
+				})
+				Theme.play(knob, "boolean-knob", {
+					Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2),
+				})
+				trackTween.Completed:Once(function()
+					if token ~= animationToken or not toggle.Parent then
+						return
+					end
+					ChangeHistoryService:SetWaypoint("Fragua Property")
+					prop.onCommit(displayValue)
+				end)
 			end)
 			return
 		end

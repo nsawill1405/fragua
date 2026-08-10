@@ -1,6 +1,8 @@
 -- Wide icon menu for custom instance types.
 -- Uses StudioService class icons where possible, plus emoji glyphs.
 
+local IconData = require(script.Parent.IconData)
+
 export type IconDef = {
 	id: string,
 	label: string,
@@ -8,6 +10,8 @@ export type IconDef = {
 	className: string?,
 	emoji: string?,
 	image: string?,
+	category: string?,
+	fallback: string?,
 }
 
 local CLASS_ICONS = {
@@ -173,15 +177,28 @@ function IconCatalog.list(): { IconDef }
 	end
 
 	local icons: { IconDef } = {}
-	for _, className in CLASS_ICONS do
-		local def: IconDef = {
-			id = "class_" .. className,
-			label = className,
-			kind = "class",
-			className = className,
-		}
+	local seen = {}
+	for _, source in IconData.list() do
+		local def: IconDef = table.clone(source) :: any
 		table.insert(icons, def)
 		byId[def.id] = def
+		seen[def.id] = true
+	end
+	for _, className in CLASS_ICONS do
+		local id = "class_" .. className
+		if not seen[id] then
+			local def: IconDef = {
+				id = id,
+				label = className,
+				kind = "class",
+				className = className,
+				category = "More",
+				fallback = string.upper(className:sub(1, 1)),
+			}
+			table.insert(icons, def)
+			byId[def.id] = def
+			seen[id] = true
+		end
 	end
 	for _, emojiDef in EMOJI_ICONS do
 		local def: IconDef = {
@@ -189,6 +206,8 @@ function IconCatalog.list(): { IconDef }
 			label = emojiDef.label,
 			kind = "emoji",
 			emoji = emojiDef.emoji,
+			category = "Symbols",
+			fallback = emojiDef.emoji,
 		}
 		table.insert(icons, def)
 		byId[def.id] = def
