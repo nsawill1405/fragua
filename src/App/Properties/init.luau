@@ -437,6 +437,37 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 						end
 					end,
 				})
+				if typeId then
+					local backingClass, backingErr = Registry.getBackingClass(typeId)
+					if backingClass and current.ClassName ~= backingClass then
+						push("Data", {
+							name = "Backing mismatch",
+							valueType = "string",
+							value = `{current.ClassName} (expected {backingClass})`,
+							readonly = true,
+							onCommit = function() end,
+						})
+						push("Data", {
+							name = "Upgrade backing",
+							valueType = "action",
+							value = `Upgrade to {backingClass}`,
+							onCommit = function()
+								local _, upgradeErr = Registry.upgradeBackingInstance(current)
+								if upgradeErr then
+									warn(`[Fragua] {upgradeErr}`)
+								end
+							end,
+						})
+					elseif backingErr then
+						push("Data", {
+							name = "Backing error",
+							valueType = "string",
+							value = backingErr,
+							readonly = true,
+							onCommit = function() end,
+						})
+					end
+				end
 
 				if def then
 					local seenDirectCategories = {}
@@ -450,26 +481,44 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					for _, prop in Registry.resolvedSchema(def) do
 						if prop.name ~= "Name" and prop.name ~= "Archivable" then
 							schemaNames[prop.name] = true
-							local value = current:GetAttribute(prop.name)
-							if value == nil then
-								value = prop.default
-							end
 							local captured = prop.name
+							local nativeProperty, value = pcall(EngineProps.get, current, captured)
+							if not nativeProperty then
+								value = current:GetAttribute(captured)
+								if value == nil then
+									value = prop.default
+								end
+							end
+							local enumItems = prop.enumItems
+							if nativeProperty and (typeof(value) == "EnumItem" or prop.valueType == "enum") then
+								enumItems = EngineProps.resolveEnumItems(prop, value)
+							end
 							push(prop.category or "Data", {
 								name = prop.name,
 								valueType = prop.valueType,
 								value = value,
 								readonly = prop.readonly == true,
-								enumItems = prop.enumItems,
+								enumItems = enumItems,
+								enumType = prop.enumType,
 								onCommit = function(v)
-									current:SetAttribute(captured, v)
+									if nativeProperty then
+										EngineProps.set(current, captured, v)
+									else
+										current:SetAttribute(captured, v)
+									end
 								end,
 								onPreview = function(v)
-									previewingAttributes[captured] = true
-									current:SetAttribute(captured, v)
-									previewingAttributes[captured] = nil
+									if nativeProperty then
+										previewingProperties[captured] = true
+										EngineProps.set(current, captured, v)
+										previewingProperties[captured] = nil
+									else
+										previewingAttributes[captured] = true
+										current:SetAttribute(captured, v)
+										previewingAttributes[captured] = nil
+									end
 								end,
-								changeKind = "attribute",
+								changeKind = if nativeProperty then "property" else "attribute",
 							})
 						end
 					end

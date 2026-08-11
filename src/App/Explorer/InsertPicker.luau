@@ -502,7 +502,6 @@ function InsertPicker.handleChoice(
 	end
 	if choice.kind == "custom" then
 		local inst = Registry.createInstance(choice.typeId, parent)
-		Registry.applyBehaviorTemplate(inst, choice.typeId)
 		afterInsert(inst)
 	end
 end

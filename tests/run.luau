@@ -4,6 +4,7 @@ TestRunner.run({
 	InteractionMath = require("./InteractionMath.spec"),
 	TypeValue = require("./TypeValue.spec"),
 	TypeDraft = require("./TypeDraft.spec"),
+	BackingClassResolver = require("./BackingClassResolver.spec"),
 	SchemaMigration = require("./SchemaMigration.spec"),
 	ColorText = require("./ColorText.spec"),
 	PreviewCommit = require("./PreviewCommit.spec"),
