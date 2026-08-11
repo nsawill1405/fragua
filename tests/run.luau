@@ -27,5 +27,7 @@ TestRunner.run({
 	TypeCatalog = require("./TypeCatalog.spec"),
 	RuntimeSources = require("./RuntimeSources.spec"),
 	WrapperPolicy = require("./WrapperPolicy.spec"),
+	BehaviorSignatures = require("./BehaviorSignatures.spec"),
+	TypeSurface = require("./TypeSurface.spec"),
 	ApiSource = require("./ApiSource.spec"),
 })

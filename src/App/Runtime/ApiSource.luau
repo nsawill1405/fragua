@@ -1,4 +1,5 @@
 local WrapperPolicy = if script then require(script.Parent.WrapperPolicy) else require("./WrapperPolicy")
+local BehaviorSignatures = if script then require(script.Parent.BehaviorSignatures) else require("./BehaviorSignatures")
 
 local ApiSource = {}
 
@@ -45,6 +46,265 @@ local function encodeKnownMethods(surface): string
 	return "{ " .. table.concat(entries, ", ") .. " }"
 end
 
+local LUAU_KEYWORDS = {
+	["and"] = true,
+	["break"] = true,
+	["continue"] = true,
+	["do"] = true,
+	["else"] = true,
+	["elseif"] = true,
+	["end"] = true,
+	["export"] = true,
+	["false"] = true,
+	["for"] = true,
+	["function"] = true,
+	["if"] = true,
+	["in"] = true,
+	["local"] = true,
+	["nil"] = true,
+	["not"] = true,
+	["or"] = true,
+	["repeat"] = true,
+	["return"] = true,
+	["then"] = true,
+	["true"] = true,
+	["type"] = true,
+	["until"] = true,
+	["while"] = true,
+}
+
+local function isIdentifier(value): boolean
+	return typeof(value) == "string" and value:match("^[%a_][%w_]*$") ~= nil and not LUAU_KEYWORDS[value]
+end
+
+local function hexBytes(value: string): string
+	local bytes = {}
+	for index = 1, #value do
+		table.insert(bytes, string.format("%02X", string.byte(value, index)))
+	end
+	return table.concat(bytes)
+end
+
+local function sortedTypeEntries(surface)
+	local entriesById = {}
+	for _, entry in surface.types or {} do
+		if typeof(entry.id) == "string" and entry.id ~= "" then
+			entriesById[entry.id] = entry
+		end
+	end
+	local entries = {}
+	for _, entry in entriesById do
+		table.insert(entries, entry)
+	end
+	table.sort(entries, function(a, b)
+		return a.id < b.id
+	end)
+	return entries
+end
+
+local function aliasNames(entries)
+	local names = {}
+	local used = {}
+	for _, entry in entries do
+		if isIdentifier(entry.id) then
+			names[entry.id] = entry.id
+			used[entry.id] = true
+		end
+	end
+	for _, entry in entries do
+		if not names[entry.id] then
+			local candidate = "_FraguaType_" .. hexBytes(entry.id)
+			while used[candidate] do
+				candidate ..= "_"
+			end
+			names[entry.id] = candidate
+			used[candidate] = true
+		end
+	end
+	return names
+end
+
+local function safeBackingClass(value): string
+	return if isIdentifier(value) then value else "Instance"
+end
+
+local function safeTypeName(value): string?
+	if typeof(value) == "string" and BehaviorSignatures.isSafeType(value) then
+		return value
+	end
+	return nil
+end
+
+local function memberName(value): string?
+	if typeof(value) ~= "string" or value == "" then
+		return nil
+	end
+	if isIdentifier(value) then
+		return value
+	end
+	return "[" .. quote(value) .. "]"
+end
+
+local function propertyType(property, side: string, names): string
+	local referenceType = property.referenceType
+	local isReference = property.valueType == "Instance"
+		or property.valueType == "FraguaInstance"
+		or referenceType ~= nil
+	if
+		typeof(referenceType) == "string"
+		and names[referenceType]
+		and (property.valueType == "FraguaInstance" or property.typeName == referenceType)
+	then
+		return names[referenceType] .. side .. "?"
+	end
+	local typeName = safeTypeName(property.typeName) or "any"
+	return if isReference then typeName .. "?" else typeName
+end
+
+local function validMethod(method): boolean
+	if
+		not isIdentifier(method.name)
+		or WrapperPolicy.isReserved(method.name, {})
+		or not safeTypeName(method.returns)
+	then
+		return false
+	end
+	for index, parameter in method.parameters or {} do
+		if
+			(not isIdentifier(parameter.name) and parameter.name ~= "...")
+			or not safeTypeName(parameter.typeName)
+			or (parameter.name == "..." and index ~= #(method.parameters or {}))
+		then
+			return false
+		end
+	end
+	return true
+end
+
+local function methodField(method, alias: string): string?
+	if not validMethod(method) then
+		return nil
+	end
+	local parameters = { "self: " .. alias }
+	for _, parameter in method.parameters or {} do
+		if parameter.name == "..." then
+			table.insert(parameters, "..." .. parameter.typeName)
+		else
+			table.insert(parameters, parameter.name .. ": " .. parameter.typeName)
+		end
+	end
+	return string.format("\t%s: (%s) -> %s,", method.name, table.concat(parameters, ", "), method.returns)
+end
+
+local function methodsForSide(entry, side: string)
+	if side == "Server" then
+		return entry.serverMethods or {}
+	elseif side == "Client" then
+		return entry.clientMethods or {}
+	end
+	return {}
+end
+
+local function aliasSource(entry, side: string, names): string
+	local alias = names[entry.id] .. side
+	local methodNames = { Clone = true }
+	local methods = {}
+	for _, method in methodsForSide(entry, side) do
+		local field = methodField(method, alias)
+		if field then
+			methodNames[method.name] = true
+			table.insert(methods, { name = method.name, field = field })
+		end
+	end
+	table.sort(methods, function(a, b)
+		return a.name < b.name
+	end)
+
+	local propertiesByName = {}
+	for _, property in entry.properties or {} do
+		local fieldName = memberName(property.name)
+		if fieldName and not methodNames[property.name] then
+			propertiesByName[property.name] = string.format("\t%s: %s,", fieldName, propertyType(property, side, names))
+		end
+	end
+	local propertyNames = sortedKeys(propertiesByName)
+	local lines = {
+		string.format("export type %s = %s & {", alias, safeBackingClass(entry.backingClass)),
+	}
+	for _, name in propertyNames do
+		table.insert(lines, propertiesByName[name])
+	end
+	table.insert(lines, string.format("\tClone: (self: %s) -> %s?,", alias, alias))
+	for _, method in methods do
+		table.insert(lines, method.field)
+	end
+	table.insert(lines, "}")
+	return table.concat(lines, "\n")
+end
+
+local function enumField(typeId: string): string
+	local name = memberName(typeId)
+	return string.format("\t%s: FraguaTypeItem<%s>,", name, quote(typeId))
+end
+
+local function facadeTypes(side: string, entries, names): string
+	local lines = {
+		string.format("type %sNew = typeof(RobloxInstance.new)", side),
+	}
+	for _, entry in entries do
+		local alias = names[entry.id] .. side
+		table.insert(lines, string.format("\t& ((className: %s, parent: Instance?) -> %s)", quote(entry.id), alias))
+		table.insert(
+			lines,
+			string.format("\t& ((className: FraguaTypeItem<%s>, parent: Instance?) -> %s)", quote(entry.id), alias)
+		)
+	end
+	table.insert(lines, string.format("type %sFromExisting = typeof(RobloxInstance.fromExisting)", side))
+	table.insert(lines, "\t& (<T>(existing: T & Instance) -> T?)")
+	table.insert(lines, string.format("type %sInstance = typeof(RobloxInstance) & {", side))
+	table.insert(lines, string.format("\tnew: %sNew,", side))
+	table.insert(lines, string.format("\tfromExisting: %sFromExisting,", side))
+	table.insert(lines, "}")
+	table.insert(lines, string.format("type %sFacade = {", side))
+	table.insert(lines, string.format("\tInstance: %sInstance,", side))
+	table.insert(lines, "\tEnum: FraguaEnum,")
+	table.insert(lines, "\tGet: <T>(value: T & Instance) -> T,")
+	table.insert(lines, "}")
+	return table.concat(lines, "\n")
+end
+
+local function encodeTypeSurface(surface): string
+	local entries = sortedTypeEntries(surface)
+	local names = aliasNames(entries)
+	local sections = {
+		"export type FraguaTypeItem<Name> = {",
+		"\tName: Name,",
+		"\tValue: Name,",
+		'\tEnumType: "FraguaType",',
+		"}",
+	}
+	for _, entry in entries do
+		for _, side in { "Server", "Client", "Core" } do
+			table.insert(sections, aliasSource(entry, side, names))
+		end
+	end
+	local enumLines = {
+		"type FraguaTypeEnum = {",
+		'\tName: "FraguaType",',
+		"\tGetEnumItems: (self: FraguaTypeEnum) -> { FraguaTypeItem<string> },",
+	}
+	for _, entry in entries do
+		table.insert(enumLines, enumField(entry.id))
+	end
+	table.insert(enumLines, "}")
+	table.insert(enumLines, "type FraguaEnum = typeof(RobloxEnum) & { FraguaType: FraguaTypeEnum }")
+	table.insert(sections, table.concat(enumLines, "\n"))
+	for _, side in { "Server", "Client", "Core" } do
+		table.insert(sections, facadeTypes(side, entries, names))
+	end
+	return table.concat(sections, "\n\n")
+end
+
 local SOURCE = [=[
 -- Fragua runtime API. Managed script headers select Core, Server, or Client.
 local CollectionService = game:GetService("CollectionService")
@@ -55,6 +315,8 @@ local RobloxInstance = Instance
 local RobloxEnum = Enum
 local RobloxType = type
 local RobloxTypeof = typeof
+
+@@TYPE_SURFACE@@
 
 local TAG = "FraguaInstance"
 local TYPE_ATTR = "_FraguaType"
@@ -848,9 +1110,12 @@ local function makeFacade(side: string)
 	return Facade
 end
 
-local Core = makeFacade("Core")
-local Server = makeFacade("Server")
-local Client = makeFacade("Client")
+local CoreRuntime = makeFacade("Core")
+local ServerRuntime = makeFacade("Server")
+local ClientRuntime = makeFacade("Client")
+local Core = CoreRuntime :: typeof(CoreRuntime) & CoreFacade
+local Server = ServerRuntime :: typeof(ServerRuntime) & ServerFacade
+local Client = ClientRuntime :: typeof(ClientRuntime) & ClientFacade
 
 local Fragua = {
 	Core = Core,
@@ -875,10 +1140,21 @@ return Fragua
 
 function ApiSource.build(surface: any?): string
 	local resolvedSurface = surface or { types = {} }
-	local source = SOURCE:gsub("@@CORE_MEMBERS@@", encodeSet(WrapperPolicy.coreMembers))
-	source = source:gsub("@@LIFECYCLE_MEMBERS@@", encodeSet(WrapperPolicy.lifecycleMembers))
-	source = source:gsub("@@WRAPPER_MEMBERS@@", encodeSet(WrapperPolicy.wrapperMembers))
-	source = source:gsub("@@KNOWN_METHOD_SIDES@@", encodeKnownMethods(resolvedSurface))
+	local source = SOURCE:gsub("@@TYPE_SURFACE@@", function()
+		return encodeTypeSurface(resolvedSurface)
+	end)
+	source = source:gsub("@@CORE_MEMBERS@@", function()
+		return encodeSet(WrapperPolicy.coreMembers)
+	end)
+	source = source:gsub("@@LIFECYCLE_MEMBERS@@", function()
+		return encodeSet(WrapperPolicy.lifecycleMembers)
+	end)
+	source = source:gsub("@@WRAPPER_MEMBERS@@", function()
+		return encodeSet(WrapperPolicy.wrapperMembers)
+	end)
+	source = source:gsub("@@KNOWN_METHOD_SIDES@@", function()
+		return encodeKnownMethods(resolvedSurface)
+	end)
 	return source
 end
 

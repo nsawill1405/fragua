@@ -188,21 +188,16 @@ local function syncClientBehavior(typeEntry: Instance, registry, entry)
 	clientBehavior.Parent = typeEntry
 end
 
-function TypeCatalog.sync(registry)
+function TypeCatalog.sync(registry, surface)
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local root = ensureChild(ReplicatedStorage, "Folder", CATALOG_NAME)
 	root:SetAttribute("_FraguaManaged", true)
 
-	local entries = TypeCatalog.snapshot(registry.list(), function(definition)
-		return registry.resolvedSchema(definition)
-	end, function(typeId)
-		return registry.getBackingClass(typeId)
-	end)
 	local active = { [NATIVE_CLASSES_NAME] = true }
 	local nativeClasses = ensureChild(root, "Folder", NATIVE_CLASSES_NAME)
 	nativeClasses:SetAttribute("_FraguaManaged", true)
 	syncOrderedStrings(nativeClasses, TypeCatalog.nativeClassNames())
-	for _, entry in entries do
+	for _, entry in surface.types do
 		active[entry.id] = true
 		local typeEntry = ensureChild(root, "Configuration", entry.id)
 		typeEntry:SetAttribute("_FraguaManaged", true)
