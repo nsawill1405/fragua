@@ -13,6 +13,7 @@ local EngineSchemas = require(script.Parent.EngineSchemas)
 local SchemaMigration = require(script.Parent.SchemaMigration)
 local SchemaResolver = require(script.Parent.SchemaResolver)
 local TypeValue = require(script.Parent.TypeValue)
+local WrapperPolicy = require(script.Parent.Parent.Runtime.WrapperPolicy)
 
 export type PropDef = {
 	name: string,
@@ -212,6 +213,41 @@ end
 
 function Registry.save(def: TypeDef)
 	assert(def.id ~= "", "Type id required")
+	local inheritedMembers = {}
+	local parent = Registry.get(def.extends)
+	local inheritedProperties = if parent then Registry.resolvedSchema(parent) else EngineSchemas.get(def.extends)
+	for _, property in inheritedProperties do
+		inheritedMembers[property.name] = true
+	end
+	local backingClass = BackingClassResolver.resolve(def.id, function(typeId)
+		return if typeId == def.id then def else Registry.get(typeId)
+	end)
+	local backingProbe
+	if backingClass then
+		local created, result = pcall(Instance.new, backingClass)
+		if created then
+			backingProbe = result
+		end
+	end
+	local collision
+	for _, property in def.properties do
+		if backingProbe then
+			local native = pcall(function()
+				local _ = backingProbe[property.name]
+			end)
+			if native then
+				inheritedMembers[property.name] = true
+			end
+		end
+		if WrapperPolicy.isReserved(property.name, inheritedMembers) then
+			collision = property.name
+			break
+		end
+	end
+	if backingProbe then
+		backingProbe:Destroy()
+	end
+	assert(not collision, `Property "{collision}" conflicts with an inherited or reserved property.`)
 	local folder = Registry.typesFolder()
 	local source = typeModuleSource(def)
 	local existing = findTypeDefinition(folder, def.id)
@@ -313,12 +349,6 @@ function Registry.delete(id: string): boolean
 	return true
 end
 
-local RESERVED_ATTRS = {
-	Name = true,
-	Archivable = true,
-	[Constants.TYPE_ATTR] = true,
-}
-
 -- Migrate attributes on placed instances after a type schema change.
 function Registry.migrateInstances(typeId: string, previous: TypeDef?, nextDef: TypeDef)
 	local previousResolved = if previous then Registry.resolvedSchema(previous) else {}
@@ -351,12 +381,12 @@ function Registry.migrateInstances(typeId: string, previous: TypeDef?, nextDef: 
 			inst:SetAttribute(renameFrom, nil)
 		end
 		for name in pairs(oldNames) do
-			if not newProps[name] and not RESERVED_ATTRS[name] and name ~= renameTo then
+			if not newProps[name] and not WrapperPolicy.isReserved(name, {}) and name ~= renameTo then
 				inst:SetAttribute(name, nil)
 			end
 		end
 		for name, prop in pairs(newProps) do
-			if not RESERVED_ATTRS[name] and inst:GetAttribute(name) == nil then
+			if not WrapperPolicy.isReserved(name, {}) and inst:GetAttribute(name) == nil then
 				inst:SetAttribute(name, prop.default)
 			end
 		end
@@ -562,10 +592,6 @@ function Registry.seedDefaults()
 		extends = "Humanoid",
 		icon = "emoji_zombie",
 		properties = {
-			{ name = "DisplayName", valueType = "string", default = "Zombie", category = "Display" },
-			{ name = "WalkSpeed", valueType = "number", default = 12, category = "Control" },
-			{ name = "MaxHealth", valueType = "number", default = 150, category = "Health" },
-			{ name = "Health", valueType = "number", default = 150, category = "Health" },
 			{ name = "IsHostile", valueType = "boolean", default = true, category = "AI" },
 			{ name = "DetectRange", valueType = "number", default = 40, category = "AI" },
 			{ name = "AttackDamage", valueType = "number", default = 15, category = "AI" },

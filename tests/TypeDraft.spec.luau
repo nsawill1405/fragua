@@ -40,6 +40,38 @@ return {
 		end
 		assert(collided[nameId] and collided[archivableId] and collided[coreId] and collided[inheritedId])
 	end,
+	["rejects wrapper and lifecycle property name collisions"] = function()
+		local draft = TypeDraft.new("Zombie")
+		local categoryId = TypeDraft.addCategory(draft, "Data")
+		local destroyId = TypeDraft.addProperty(draft, categoryId, "Destroy", "string", "hidden")
+		local lifecycleId = TypeDraft.addProperty(draft, categoryId, "onStart", "boolean", false)
+		local errors = TypeDraft.validate(draft, function()
+			return nil
+		end)
+		local collided = {}
+		for _, error in errors do
+			if error.code == "reserved-property" then
+				collided[error.fieldId] = true
+			end
+		end
+		assert(collided[destroyId] and collided[lifecycleId])
+	end,
+	["rejects inherited native method and event collisions"] = function()
+		local draft = TypeDraft.new("Zombie")
+		local categoryId = TypeDraft.addCategory(draft, "Data")
+		local methodId = TypeDraft.addProperty(draft, categoryId, "FindFirstChild", "string", "hidden")
+		local eventId = TypeDraft.addProperty(draft, categoryId, "AncestryChanged", "boolean", false)
+		local errors = TypeDraft.validate(draft, function()
+			return nil
+		end)
+		local collided = {}
+		for _, error in errors do
+			if error.code == "reserved-property" then
+				collided[error.fieldId] = true
+			end
+		end
+		assert(collided[methodId] and collided[eventId])
+	end,
 	["keeps property category identity stable across rename"] = function()
 		local draft = TypeDraft.new("Zombie")
 		local categoryId = TypeDraft.addCategory(draft, "AI")
