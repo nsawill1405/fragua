@@ -22,6 +22,7 @@ return {
 		assert(ok and Header, "ScriptHeader should be available")
 		assert(Header.shouldSkip("ReplicatedStorage.Fragua"))
 		assert(Header.shouldSkip("ServerScriptService.FraguaRuntime"))
+		assert(Header.shouldSkip("StarterPlayer.StarterPlayerScripts.FraguaClientRuntime"))
 		assert(not Header.shouldSkip("ServerScriptService.Gameplay"))
 	end,
 	["keeps Luau mode directives on the first line"] = function()

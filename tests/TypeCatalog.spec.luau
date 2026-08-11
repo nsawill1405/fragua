@@ -22,11 +22,31 @@ return {
 		property.default = 0
 		assert(rows[1].properties[1].default == 100)
 	end,
+	["catalog snapshot exposes backing and ordered Fragua ancestry metadata"] = function()
+		assert(ok and TypeCatalog, "TypeCatalog should be available")
+		local definitions = {
+			{ id = "Enemy", name = "Enemy", extends = "Part" },
+			{ id = "Zombie", name = "Zombie", extends = "Enemy" },
+		}
+		local rows = TypeCatalog.snapshot(definitions, function()
+			return {}
+		end, function()
+			return "Part"
+		end)
+		assert(rows[2].backingClass == "Part")
+		assert(#rows[2].ancestors == 1 and rows[2].ancestors[1] == "Enemy")
+	end,
 	["runtime catalog does not call the removed unsided behavior API"] = function()
 		local source = fs.readFile("src/App/Runtime/TypeCatalog.luau")
 		assert(
 			not source:find("registry.getSharedBehavior", 1, true),
 			"TypeCatalog.sync must not call removed Registry.getSharedBehavior"
 		)
+	end,
+	["catalog source mirrors only the canonical client behavior"] = function()
+		local source = fs.readFile("src/App/Runtime/TypeCatalog.luau")
+		assert(source:find('ensureBehaviorTemplate(entry.id, "Client")', 1, true))
+		assert(not source:find('ensureBehaviorTemplate(entry.id, "Edit")', 1, true))
+		assert(not source:find('ensureBehaviorTemplate(entry.id, "Server")', 1, true))
 	end,
 }

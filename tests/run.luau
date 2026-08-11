@@ -24,5 +24,6 @@ TestRunner.run({
 	ScriptHeader = require("./ScriptHeader.spec"),
 	ScriptUpdateGate = require("./ScriptUpdateGate.spec"),
 	TypeCatalog = require("./TypeCatalog.spec"),
+	RuntimeSources = require("./RuntimeSources.spec"),
 	ApiSource = require("./ApiSource.spec"),
 })

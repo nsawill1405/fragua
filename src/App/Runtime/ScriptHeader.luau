@@ -52,7 +52,9 @@ function ScriptHeader.apply(source: string): (string, boolean)
 end
 
 function ScriptHeader.shouldSkip(fullName: string): boolean
-	return fullName == "ReplicatedStorage.Fragua" or fullName == "ServerScriptService.FraguaRuntime"
+	return fullName == "ReplicatedStorage.Fragua"
+		or fullName == "ServerScriptService.FraguaRuntime"
+		or fullName == "StarterPlayer.StarterPlayerScripts.FraguaClientRuntime"
 end
 
 ScriptHeader.HEADER = HEADER
