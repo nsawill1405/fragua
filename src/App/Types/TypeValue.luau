@@ -1,6 +1,7 @@
 local TypeValue = {}
 
 local Constants = if script then require(script.Parent.Parent.Shared.Constants) else require("../Shared/Constants")
+local ReferencePolicy = if script then require(script.Parent.ReferencePolicy) else require("./ReferencePolicy")
 
 local luneAvailable, LuneRoblox = pcall(function()
 	return require("@lune/roblox")
@@ -121,7 +122,7 @@ function TypeValue.validate(valueType: string, value: any, metadata: table?): (b
 			if typeof(typeId) ~= "string" or typeId == "" then
 				return false, "Expected a Fragua instance reference."
 			end
-			if typeId ~= referenceType then
+			if not ReferencePolicy.matches(typeId, referenceType, if metadata then metadata.lookupType else nil) then
 				return false, `Expected a {referenceType} reference, got {typeId}.`
 			end
 		end
