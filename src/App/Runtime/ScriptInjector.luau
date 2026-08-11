@@ -1,5 +1,6 @@
 local ScriptEditorService = game:GetService("ScriptEditorService")
 
+local ScriptContext = require(script.Parent.ScriptContext)
 local ScriptHeader = require(script.Parent.ScriptHeader)
 local ScriptUpdateGate = require(script.Parent.ScriptUpdateGate)
 
@@ -50,14 +51,18 @@ function ScriptInjector.start()
 		if ScriptHeader.shouldSkip(container:GetFullName()) then
 			return
 		end
+		local facade = ScriptContext.select(container.ClassName, container:GetFullName())
+		local apply = function(source: string): (string, boolean)
+			return ScriptHeader.apply(source, facade)
+		end
 
 		local editorReadOk, editorSource = pcall(ScriptEditorService.GetEditorSource, ScriptEditorService, container)
 		local currentSource = ScriptUpdateGate.selectSource(editorReadOk, editorSource, container.Source)
-		ScriptUpdateGate.run(currentSource, ScriptHeader.apply, function()
+		ScriptUpdateGate.run(currentSource, apply, function()
 			updating[container] = true
 			local ok, err = pcall(function()
 				ScriptEditorService:UpdateSourceAsync(container, function(oldSource)
-					local nextSource = ScriptHeader.apply(oldSource)
+					local nextSource = apply(oldSource)
 					return nextSource
 				end)
 			end)
