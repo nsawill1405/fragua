@@ -43,4 +43,15 @@ function BehaviorTemplatePolicy.backupFolderName(existing: { [string]: string })
 	return candidate
 end
 
+function BehaviorTemplatePolicy.backupName(existing: { [string]: any }, typeId: string): string
+	local base = typeId .. "BehaviorBackup"
+	local suffix = 1
+	local candidate = base .. tostring(suffix)
+	while existing[candidate] do
+		suffix += 1
+		candidate = base .. tostring(suffix)
+	end
+	return candidate
+end
+
 return BehaviorTemplatePolicy

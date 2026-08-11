@@ -6,6 +6,7 @@ local Theme = require(script.Parent.Shared.Theme)
 local Util = require(script.Parent.Shared.Util)
 local UiUtil = require(script.Parent.Shared.UiUtil)
 local IconCatalog = require(script.Parent.Types.IconCatalog)
+local BehaviorModel = require(script.Parent.Types.BehaviorModel)
 local Registry = require(script.Parent.Types.Registry)
 local EngineProps = require(script.EngineProps)
 local Controls = require(script.Controls)
@@ -525,19 +526,6 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				end
 
 				if typeId then
-					local behavior = Registry.ensureBehaviorTemplate(typeId)
-					local hooks = {}
-					for hookName in behavior.Source:gmatch("function%s+Behavior%.([%a_][%w_]*)") do
-						table.insert(hooks, hookName)
-					end
-					table.sort(hooks)
-					push("Behavior", {
-						name = "Shared behavior",
-						valueType = "string",
-						value = behavior.Name,
-						readonly = true,
-						onCommit = function() end,
-					})
 					push("Behavior", {
 						name = "Used by",
 						valueType = "string",
@@ -545,28 +533,38 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 						readonly = true,
 						onCommit = function() end,
 					})
-					push("Behavior", {
-						name = "Hooks",
-						valueType = "string",
-						value = if #hooks > 0 then table.concat(hooks, ", ") else "No hooks yet",
-						readonly = true,
-						onCommit = function() end,
-					})
-					push("Behavior", {
-						name = "Code",
-						valueType = "action",
-						value = "Edit behavior",
-						onCommit = function()
-							if opts.onEditScript then
-								opts.onEditScript({
-									target = behavior,
-									title = behavior.Name,
-									typeId = typeId,
-									sharedCount = Registry.countInstances(typeId),
-								})
-							end
-						end,
-					})
+					for _, side in BehaviorModel.SIDES do
+						local capturedSide = side
+						local behavior = Registry.ensureBehaviorTemplate(typeId, capturedSide)
+						local hooks = {}
+						for hookName in behavior.Source:gmatch("function%s+Behavior%.([%a_][%w_]*)") do
+							table.insert(hooks, hookName)
+						end
+						table.sort(hooks)
+						push("Behavior", {
+							name = capturedSide .. " hooks",
+							valueType = "string",
+							value = if #hooks > 0 then table.concat(hooks, ", ") else "No hooks yet",
+							readonly = true,
+							onCommit = function() end,
+						})
+						push("Behavior", {
+							name = capturedSide .. " behavior",
+							valueType = "action",
+							value = `Edit {capturedSide} Behavior`,
+							onCommit = function()
+								if opts.onEditScript then
+									opts.onEditScript({
+										target = behavior,
+										title = behavior.Name,
+										typeId = typeId,
+										side = capturedSide,
+										sharedCount = Registry.countInstances(typeId),
+									})
+								end
+							end,
+						})
+					end
 				end
 			else
 				title.Text = current.Name .. "  /  " .. current.ClassName

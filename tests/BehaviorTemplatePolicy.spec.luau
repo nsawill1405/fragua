@@ -38,4 +38,13 @@ return {
 		assert(Policy.backupFolderName, "backupFolderName should be available")
 		assert(Policy.backupFolderName({}) == "BehaviorBackups")
 	end,
+	["legacy source backup naming never overwrites an existing backup"] = function()
+		assert(ok and Policy, "BehaviorTemplatePolicy should be available")
+		assert(Policy.backupName, "backupName should be available")
+		assert(Policy.backupName({}, "Zombie") == "ZombieBehaviorBackup1")
+		assert(
+			Policy.backupName({ ZombieBehaviorBackup1 = true, ZombieBehaviorBackup2 = true }, "Zombie")
+				== "ZombieBehaviorBackup3"
+		)
+	end,
 }

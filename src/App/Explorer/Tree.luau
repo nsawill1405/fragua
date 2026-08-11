@@ -1,5 +1,6 @@
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local Selection = game:GetService("Selection")
+local ScriptEditorService = game:GetService("ScriptEditorService")
 local UserInputService = game:GetService("UserInputService")
 
 local Theme = require(script.Parent.Parent.Shared.Theme)
@@ -8,11 +9,23 @@ local PointerController = require(script.Parent.Parent.Shared.PointerController)
 local InteractionMath = require(script.Parent.Parent.Shared.InteractionMath)
 local Constants = require(script.Parent.Parent.Shared.Constants)
 local SettingsStore = require(script.Parent.Parent.Settings.Store)
+local BehaviorModel = require(script.Parent.Parent.Types.BehaviorModel)
 local IconCatalog = require(script.Parent.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Parent.Types.Registry)
 local ContextMenu = require(script.Parent.ContextMenu)
 
 local Tree = {}
+
+local function openBehaviorScript(typeId: string, side: string)
+	local behavior = Registry.ensureBehaviorTemplate(typeId, side)
+	Selection:Set({ behavior })
+	task.spawn(function()
+		local ok, opened, err = pcall(ScriptEditorService.OpenScriptDocumentAsync, ScriptEditorService, behavior)
+		if not ok or not opened then
+			warn(`[Fragua] Could not open {BehaviorModel.name(typeId, side)}: {tostring(if ok then err else opened)}`)
+		end
+	end)
+end
 
 local DEFAULT_SERVICE_COLORS: { [string]: Color3 } = {
 	Workspace = Color3.fromRGB(100, 180, 120),
@@ -691,12 +704,32 @@ function Tree.mount(
 				end,
 			},
 			{
-				label = "Edit Behavior...",
+				label = "Edit Edit Behavior...",
 				disabled = not Registry.isFraguaInstance(instance),
 				onClick = function()
 					local typeId = Registry.getTypeId(instance)
 					if typeId then
-						Selection:Set({ Registry.ensureBehaviorTemplate(typeId) })
+						openBehaviorScript(typeId, "Edit")
+					end
+				end,
+			},
+			{
+				label = "Edit Server Behavior...",
+				disabled = not Registry.isFraguaInstance(instance),
+				onClick = function()
+					local typeId = Registry.getTypeId(instance)
+					if typeId then
+						openBehaviorScript(typeId, "Server")
+					end
+				end,
+			},
+			{
+				label = "Edit Client Behavior...",
+				disabled = not Registry.isFraguaInstance(instance),
+				onClick = function()
+					local typeId = Registry.getTypeId(instance)
+					if typeId then
+						openBehaviorScript(typeId, "Client")
 					end
 				end,
 			},
