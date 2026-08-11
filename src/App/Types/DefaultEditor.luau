@@ -5,6 +5,19 @@ local TypeValue = if script then require(script.Parent.TypeValue) else require("
 
 local DefaultEditor = {}
 
+local luneAvailable, LuneRoblox = pcall(function()
+	return require("@lune/roblox")
+end)
+local BrickColorConstructor = if luneAvailable then LuneRoblox.BrickColor else BrickColor
+
+function DefaultEditor.colorValue(valueType: string, color: Color3)
+	if valueType == "BrickColor" then
+		local typed = BrickColorConstructor.new(color)
+		return typed, typed.Color
+	end
+	return color, color
+end
+
 local function uiDependencies()
 	assert(script, "DefaultEditor.mount is only available in Roblox Studio")
 	return require(script.Parent.Parent.Properties.Controls), require(script.Parent.Parent.Shared.Theme)
@@ -31,8 +44,10 @@ local function safeList(callback: ((string?) -> { string })?, argument: string?)
 	return if ok then cloneList(result) else {}
 end
 
-function DefaultEditor.referenceError(value: any, prop: any): string?
-	local valid, message = TypeValue.validate(prop.valueType, value, prop)
+function DefaultEditor.referenceError(value: any, prop: any, lookupType): string?
+	local metadata = table.clone(prop)
+	metadata.lookupType = lookupType
+	local valid, message = TypeValue.validate(prop.valueType, value, metadata)
 	return if valid then nil else message
 end
 
@@ -218,17 +233,28 @@ function DefaultEditor.mount(parent: GuiObject, prop: any, options: any)
 		local brickColor = prop.valueType == "BrickColor"
 		local color = if brickColor then current.Color else current
 		local function fromColor(nextColor)
-			return if brickColor then BrickColor.new(nextColor) else nextColor
+			return DefaultEditor.colorValue(prop.valueType, nextColor)
+		end
+		local normalize
+		if brickColor then
+			normalize = function(nextColor)
+				local _, display = DefaultEditor.colorValue(prop.valueType, nextColor)
+				return display
+			end
 		end
 		local control, update = Controls.colorField(root, color, function(nextColor)
 			previewing = false
-			changed(fromColor(nextColor))
+			local typed, display = fromColor(nextColor)
+			update(display)
+			changed(typed)
 		end, function(nextColor)
 			previewing = true
+			local typed, display = fromColor(nextColor)
+			update(display)
 			if options.onPreview then
-				options.onPreview(fromColor(nextColor))
+				options.onPreview(typed)
 			end
-		end)
+		end, normalize)
 		control.Size = UDim2.fromScale(1, 1)
 		updateControl = function(nextValue)
 			current = nextValue
@@ -335,7 +361,7 @@ function DefaultEditor.mount(parent: GuiObject, prop: any, options: any)
 					validationProp.referenceType = selectedType
 				end
 			end
-			local message = DefaultEditor.referenceError(candidate, validationProp)
+			local message = DefaultEditor.referenceError(candidate, validationProp, options.lookupType)
 			if message then
 				reportError(message)
 				return

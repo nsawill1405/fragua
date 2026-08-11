@@ -3,6 +3,7 @@ local TestRunner = require("./TestRunner")
 TestRunner.run({
 	InteractionMath = require("./InteractionMath.spec"),
 	TypeValue = require("./TypeValue.spec"),
+	TypedDefaultsFix = require("./TypedDefaultsFix.spec"),
 	TypeDraft = require("./TypeDraft.spec"),
 	BackingClassResolver = require("./BackingClassResolver.spec"),
 	BackingUpgradePolicy = require("./BackingUpgradePolicy.spec"),

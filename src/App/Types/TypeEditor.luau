@@ -11,6 +11,7 @@ local Registry = require(script.Parent.Registry)
 local TypeDraft = require(script.Parent.TypeDraft)
 local TypeEditorLayout = require(script.Parent.TypeEditorLayout)
 local TypeValue = require(script.Parent.TypeValue)
+local EnumDefaults = require(script.Parent.EnumDefaults)
 
 local TypeEditor = {}
 
@@ -19,6 +20,7 @@ local VALUE_TYPES = TypeValue.supported()
 
 type PropDraft = {
 	id: string,
+	originalName: string?,
 	name: string,
 	valueType: string,
 	defaultValue: any,
@@ -47,13 +49,15 @@ local function enumNames(): { string }
 	for _, enumType in Enum:GetEnums() do
 		table.insert(names, enumType.Name)
 	end
-	table.sort(names)
-	return names
+	return EnumDefaults.names(names, Registry.list())
 end
 
 local function enumItems(enumTypeName: string?): { string }
 	if not enumTypeName then
 		return {}
+	end
+	if enumTypeName == "FraguaType" then
+		return EnumDefaults.items(enumTypeName, Registry.list())
 	end
 	local ok, enumType = pcall(function()
 		return (Enum :: any)[enumTypeName]
@@ -556,6 +560,8 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 
 	local function copyProperty(prop, category: string): PropDraft
 		local copy = makeProperty(prop.name, prop.valueType or "string", category, prop.default)
+		copy.id = prop.id or copy.id
+		copy.originalName = prop.originalName or prop.name
 		for _, field in PROPERTY_METADATA do
 			copy[field] = prop[field]
 		end
@@ -851,6 +857,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 							return Selection:Get()
 						end,
 						getReferenceType = Registry.getTypeId,
+						lookupType = Registry.get,
 						setSelection = function(items)
 							Selection:Set(items)
 						end,
@@ -972,6 +979,8 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 		for _, catName in categoryOrder do
 			for _, property in propsByCat[catName] or {} do
 				local direct = {
+					id = property.id,
+					originalName = property.originalName,
 					name = property.name,
 					valueType = property.valueType,
 					default = property.defaultValue,
@@ -1252,6 +1261,8 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 						return
 					end
 					local property = {
+						id = prop.id,
+						originalName = prop.originalName,
 						name = pname,
 						valueType = prop.valueType,
 						default = prop.defaultValue,

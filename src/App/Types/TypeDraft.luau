@@ -199,7 +199,9 @@ function TypeDraft.validate(draft, lookupType)
 			else
 				seenNames[property.name] = true
 			end
-			local valid, message = TypeValue.validate(property.valueType, property.defaultValue, property)
+			local validationMetadata = table.clone(property)
+			validationMetadata.lookupType = lookupType
+			local valid, message = TypeValue.validate(property.valueType, property.defaultValue, validationMetadata)
 			if property.defaultInputError or not valid then
 				table.insert(errors, {
 					fieldId = propertyId,

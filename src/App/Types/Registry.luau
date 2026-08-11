@@ -10,12 +10,14 @@ local BehaviorTemplatePolicy = require(script.Parent.BehaviorTemplatePolicy)
 local BackingClassResolver = require(script.Parent.BackingClassResolver)
 local BackingUpgradePolicy = require(script.Parent.BackingUpgradePolicy)
 local EngineSchemas = require(script.Parent.EngineSchemas)
-local SchemaMigration = require(script.Parent.SchemaMigration)
+local PropertyMigration = require(script.Parent.PropertyMigration)
 local SchemaResolver = require(script.Parent.SchemaResolver)
 local TypeValue = require(script.Parent.TypeValue)
 local WrapperPolicy = require(script.Parent.Parent.Runtime.WrapperPolicy)
 
 export type PropDef = {
+	id: string?,
+	originalName: string?,
 	name: string,
 	valueType: string,
 	default: any,
@@ -76,6 +78,8 @@ local function encodeType(def: TypeDef): string
 	for _, prop in def.properties do
 		local reference = prop.valueType == "Instance" or prop.valueType == "FraguaInstance"
 		table.insert(props, {
+			id = prop.id,
+			originalName = prop.originalName,
 			name = prop.name,
 			valueType = prop.valueType,
 			default = if reference then TypeValue.referenceMarker(prop.name) else TypeValue.serialize(prop.default),
@@ -127,6 +131,8 @@ local function decodeType(raw: string): TypeDef?
 		for _, prop in data.properties do
 			if typeof(prop) == "table" and typeof(prop.name) == "string" then
 				table.insert(props, {
+					id = prop.id,
+					originalName = prop.originalName,
 					name = prop.name,
 					valueType = prop.valueType or "string",
 					default = TypeValue.deserialize(prop.default),
@@ -414,57 +420,50 @@ end
 function Registry.migrateInstances(typeId: string, previous: TypeDef?, nextDef: TypeDef)
 	local previousResolved = if previous then Registry.resolvedSchema(previous) else {}
 	local nextResolved = Registry.resolvedSchema(nextDef)
-	local migration = SchemaMigration.plan({ properties = previousResolved }, { properties = nextResolved })
-	local oldNames: { [string]: boolean } = {}
-	if previous then
-		for _, prop in previousResolved do
-			oldNames[prop.name] = true
-		end
-	end
-
-	local newProps: { [string]: PropDef } = {}
-	for _, prop in nextResolved do
-		newProps[prop.name] = prop
-	end
-
-	local renameFrom = if migration.rename[1] then migration.rename[1].from else nil
-	local renameTo = if migration.rename[1] then migration.rename[1].to else nil
+	local operations = PropertyMigration.plan(previousResolved, nextResolved)
 
 	ChangeHistoryService:SetWaypoint("Fragua Migrate Type")
 	local count = 0
 	for _, inst in Registry.findInstances(typeId) do
 		count += 1
-		if renameFrom and renameTo then
-			local value = inst:GetAttribute(renameFrom)
-			if value ~= nil then
-				inst:SetAttribute(renameTo, value)
-			end
-			inst:SetAttribute(renameFrom, nil)
-			local reference = inst:FindFirstChild(REFERENCE_PREFIX .. renameFrom)
-			if reference and reference:IsA("ObjectValue") then
-				reference.Name = REFERENCE_PREFIX .. renameTo
-			end
-		end
-		for name in pairs(oldNames) do
-			if not newProps[name] and not WrapperPolicy.isReserved(name, {}) and name ~= renameTo then
-				inst:SetAttribute(name, nil)
-				local reference = inst:FindFirstChild(REFERENCE_PREFIX .. name)
-				if reference and reference:IsA("ObjectValue") then
-					reference:Destroy()
+		for _, operation in operations do
+			local old, new = operation.old, operation.new
+			local oldRef = old and PropertyMigration.isReference(old)
+			local newRef = new and PropertyMigration.isReference(new)
+			local oldObject = old and inst:FindFirstChild(REFERENCE_PREFIX .. old.name)
+			local preserved = old and new and oldRef == newRef
+			local attribute = if preserved and not oldRef then inst:GetAttribute(old.name) else nil
+			local objectValue = if preserved
+					and oldRef
+					and oldObject
+					and oldObject:IsA("ObjectValue")
+				then oldObject.Value
+				else nil
+			if old then
+				if not WrapperPolicy.isReserved(old.name, {}) then
+					inst:SetAttribute(old.name, nil)
+				end
+				if oldObject and oldObject:IsA("ObjectValue") then
+					oldObject:Destroy()
 				end
 			end
-		end
-		for name, prop in pairs(newProps) do
-			if prop.valueType == "Instance" or prop.valueType == "FraguaInstance" then
-				if not inst:FindFirstChild(REFERENCE_PREFIX .. name) then
+			if new then
+				inst:SetAttribute(new.name, nil)
+				local stale = inst:FindFirstChild(REFERENCE_PREFIX .. new.name)
+				if stale and stale:IsA("ObjectValue") then
+					stale:Destroy()
+				end
+				if newRef then
 					local reference = Instance.new("ObjectValue")
-					reference.Name = REFERENCE_PREFIX .. name
+					reference.Name = REFERENCE_PREFIX .. new.name
 					reference:SetAttribute(MANAGED_ATTRIBUTE, true)
-					reference.Value = if typeof(prop.default) == "Instance" then prop.default else nil
+					reference.Value = if preserved
+						then objectValue
+						else if typeof(new.default) == "Instance" then new.default else nil
 					reference.Parent = inst
+				elseif not WrapperPolicy.isReserved(new.name, {}) then
+					inst:SetAttribute(new.name, if preserved and attribute ~= nil then attribute else new.default)
 				end
-			elseif not WrapperPolicy.isReserved(name, {}) and inst:GetAttribute(name) == nil then
-				inst:SetAttribute(name, prop.default)
 			end
 		end
 	end

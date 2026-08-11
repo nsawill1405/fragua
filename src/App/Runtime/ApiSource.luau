@@ -566,7 +566,7 @@ local function declaredEnumName(property, value): string?
 	if RobloxTypeof(enumTypeName) ~= "string" then
 		return nil
 	end
-	local enumType = RobloxEnum[enumTypeName]
+	local enumType = FraguaEnum[enumTypeName]
 	if not enumType then
 		return nil
 	end
@@ -575,6 +575,8 @@ local function declaredEnumName(property, value): string?
 		if value.EnumType ~= enumType then
 			return nil
 		end
+		name = value.Name
+	elseif RobloxTypeof(value) == "table" and value.EnumType == enumTypeName then
 		name = value.Name
 	elseif RobloxTypeof(value) == "string" then
 		name = value
@@ -605,7 +607,7 @@ local function readCustomProperty(state, property, name: string)
 	local value = backing:GetAttribute(name)
 	local enumTypeName = property:GetAttribute("EnumType")
 	if RobloxTypeof(enumTypeName) == "string" and value ~= nil then
-		local enumType = RobloxEnum[enumTypeName]
+		local enumType = FraguaEnum[enumTypeName]
 		return if enumType then enumType[value] else nil
 	end
 	return value

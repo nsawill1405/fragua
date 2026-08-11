@@ -359,7 +359,8 @@ function Controls.colorField(
 	parent: GuiObject,
 	value: Color3,
 	onCommit: (Color3) -> (),
-	onPreview: ((Color3) -> ())?
+	onPreview: ((Color3) -> ())?,
+	normalize: ((Color3) -> Color3)?
 ): (Frame, (Color3) -> ())
 	local holder = Instance.new("Frame")
 	holder.BackgroundTransparency = 1
@@ -603,6 +604,9 @@ function Controls.colorField(
 
 		local function refresh()
 			working = Color3.fromHSV(h, s, v)
+			if normalize then
+				working = normalize(working)
+			end
 			PreviewCommit.preview(transaction, working)
 			preview.BackgroundColor3 = working
 			sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
@@ -688,6 +692,9 @@ function Controls.colorField(
 		local r, g, b = ColorText.parse(hex.Text)
 		if r then
 			local c = Color3.new(r, g :: number, b :: number)
+			if normalize then
+				c = normalize(c)
+			end
 			swatch.BackgroundColor3 = c
 			hex.Text = " " .. ColorText.format(c.R, c.G, c.B)
 			onCommit(c)
