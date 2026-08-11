@@ -61,7 +61,7 @@ return {
 		local items = Model.complete(request, surface(), "Server")
 		assert(find(items, "Attack"))
 		assert(not find(items, "PlayClientEffect"))
-		assert(find(items, "Health"))
+		assert(not find(items, "Health"))
 	end,
 	["infers enum constructors and Fragua.Get local assignments"] = function()
 		assert(ok and Model, "AutocompleteModel should be available")
@@ -82,7 +82,7 @@ return {
 	end,
 	["invalidates local inference when the catalogue revision changes"] = function()
 		assert(ok and Model, "AutocompleteModel should be available")
-		local request = { line = 'local ghost = Instance.new("Ghost")\nghost:', position = 46 }
+		local request = { line = 'local ghost = Instance.new("Ghost")\nghost.', position = 46 }
 		local cachedSurface = surface()
 		assert(not find(Model.complete(request, cachedSurface, "Server"), "Haunt"))
 		table.insert(cachedSurface.types, {
@@ -144,5 +144,39 @@ return {
 		assert(#extracted == 201)
 		assert(extracted[1] == "ignored801")
 		assert(extracted[#extracted] == "current")
+	end,
+	["uses dot access for properties with a partial replacement range"] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local source = 'local zombie = Instance.new("Zombie")\nzombie.He'
+		local items = Model.complete({ line = source, position = #source }, surface(), "Server")
+		local health = find(items, "Health")
+		assert(health and health.kind == "Property")
+		assert(not find(items, "Attack"))
+		assert(health.textEdit and health.textEdit.replace.start == #source - 2)
+		assert(health.textEdit.replace["end"] == #source)
+	end,
+	["uses colon access only for methods"] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local source = 'local zombie = Instance.new("Zombie")\nzombie:'
+		local items = Model.complete({ line = source, position = #source }, surface(), "Server")
+		local attack = find(items, "Attack")
+		assert(attack and attack.kind == "Method")
+		assert(not find(items, "Health"))
+		assert(attack.textEdit == nil)
+	end,
+	["qualified constructors retain their explicit facade through aliases"] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local source = 'local zombie = Fragua.Client.Instance.new("Zombie")\nlocal copy = zombie\ncopy:'
+		local items = Model.complete({ line = source, position = #source }, surface(), "Server")
+		assert(find(items, "PlayClientEffect"))
+		assert(not find(items, "Attack"))
+	end,
+	["qualified Get calls select their invoked facade"] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local source = 'local raw = Fragua.Server.Instance.new("Zombie")\nlocal zombie = Fragua.Core.Get(raw)\nzombie:'
+		local items = Model.complete({ line = source, position = #source }, surface(), "Server")
+		assert(not find(items, "Attack"))
+		assert(not find(items, "PlayClientEffect"))
+		assert(find(items, "Destroy"))
 	end,
 }

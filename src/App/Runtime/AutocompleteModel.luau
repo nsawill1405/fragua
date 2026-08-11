@@ -11,28 +11,14 @@ local function hash(value: string): string
 	return tostring(result)
 end
 
-local function revision(surface): string
+local function revision(surface): string?
 	if surface.revision ~= nil then
 		return tostring(surface.revision)
 	end
 	if surface.catalogueRevision ~= nil then
 		return tostring(surface.catalogueRevision)
 	end
-	local parts = {}
-	for _, typeEntry in surface.types or {} do
-		table.insert(parts, typeEntry.id or "")
-		for _, property in typeEntry.properties or {} do
-			table.insert(parts, property.name or "")
-		end
-		for _, method in typeEntry.serverMethods or {} do
-			table.insert(parts, method.name or "")
-		end
-		for _, method in typeEntry.clientMethods or {} do
-			table.insert(parts, method.name or "")
-		end
-	end
-	table.sort(parts)
-	return hash(table.concat(parts, "\0"))
+	return nil
 end
 
 local function sourceFrom(request): string
@@ -100,27 +86,54 @@ local function typesById(surface)
 	return result
 end
 
-local function inferLocals(source: string, position: number, surface, lines)
-	local cacheKey = hash(source) .. ":" .. revision(surface) .. ":" .. tostring(position)
-	if inferenceCache[cacheKey] then
+local function isFacade(value): boolean
+	return value == "Server" or value == "Client" or value == "Core"
+end
+
+local function inferLocals(surface, lines)
+	local surfaceRevision = revision(surface)
+	local contextLines = {}
+	for index = 1, #lines - 1 do
+		table.insert(contextLines, lines[index])
+	end
+	local cacheKey = if surfaceRevision then surfaceRevision .. ":" .. hash(table.concat(contextLines, "\n")) else nil
+	if cacheKey and inferenceCache[cacheKey] then
 		return inferenceCache[cacheKey]
 	end
 
 	local knownTypes = typesById(surface)
 	local locals = {}
-	for _, line in lines do
-		local name, typeId = line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Instance%.new%s*%(%s*[\"']([^\"']+)[\"']%s*%)")
+	for _, line in contextLines do
+		local name, explicitFacade, typeId = line:match(
+			"^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.([%a_][%w_]*)%.Instance%.new%s*%(%s*[\"']([^\"']+)[\"']%s*%)"
+		)
+		if not (name and isFacade(explicitFacade)) then
+			name, typeId = line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Instance%.new%s*%(%s*[\"']([^\"']+)[\"']%s*%)")
+			explicitFacade = nil
+		end
 		if not typeId then
-			name, typeId =
-				line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Instance%.new%s*%(%s*Enum%.FraguaType%.([%a_][%w_]*)%s*%)")
+			name, explicitFacade, typeId = line:match(
+				"^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.([%a_][%w_]*)%.Instance%.new%s*%(%s*Enum%.FraguaType%.([%a_][%w_]*)%s*%)"
+			)
+			if not (name and isFacade(explicitFacade)) then
+				name, typeId = line:match(
+					"^%s*local%s+([%a_][%w_]*)%s*=%s*Instance%.new%s*%(%s*Enum%.FraguaType%.([%a_][%w_]*)%s*%)"
+				)
+				explicitFacade = nil
+			end
 		end
 		if name and knownTypes[typeId] then
-			locals[name] = typeId
+			locals[name] = { typeId = typeId, facade = explicitFacade }
 		else
-			local assigned, sourceName =
-				line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.Get%s*%(%s*([%a_][%w_]*)%s*%)")
+			local assigned, getFacade, sourceName =
+				line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.([%a_][%w_]*)%.Get%s*%(%s*([%a_][%w_]*)%s*%)")
+			if not (assigned and isFacade(getFacade)) then
+				assigned, sourceName =
+					line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.Get%s*%(%s*([%a_][%w_]*)%s*%)")
+				getFacade = nil
+			end
 			if assigned and locals[sourceName] then
-				locals[assigned] = locals[sourceName]
+				locals[assigned] = { typeId = locals[sourceName].typeId, facade = getFacade }
 			else
 				assigned, sourceName = line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*([%a_][%w_]*)%s*$")
 				if assigned and locals[sourceName] then
@@ -133,8 +146,10 @@ local function inferLocals(source: string, position: number, surface, lines)
 		inferenceCache = {}
 		inferenceCacheSize = 0
 	end
-	inferenceCache[cacheKey] = locals
-	inferenceCacheSize += 1
+	if cacheKey then
+		inferenceCache[cacheKey] = locals
+		inferenceCacheSize += 1
+	end
 	return locals
 end
 
@@ -186,37 +201,43 @@ local function methodDetail(method): string
 	return string.format("(%s) -> %s", table.concat(parameters, ", "), method.returns or "any")
 end
 
-local function memberItems(typeEntry, facade: string, partial: string, position: number)
+local function memberItems(typeEntry, facade: string, access: string, partial: string, position: number)
 	local itemsByLabel = {}
-	for _, property in typeEntry.properties or {} do
-		if typeof(property.name) == "string" and matches(property.name, partial) then
-			itemsByLabel[property.name] = {
-				label = property.name,
-				kind = "Property",
-				detail = property.typeName or property.valueType or "any",
-				documentation = if property.inherited then "Inherited Fragua property" else "Fragua property",
-			}
+	if access == "." then
+		for _, property in typeEntry.properties or {} do
+			if typeof(property.name) == "string" and matches(property.name, partial) then
+				itemsByLabel[property.name] = {
+					label = property.name,
+					kind = "Property",
+					detail = property.typeName or property.valueType or "any",
+					documentation = if property.inherited then "Inherited Fragua property" else "Fragua property",
+				}
+			end
 		end
 	end
 	local methods = if facade == "Server"
 		then typeEntry.serverMethods
 		elseif facade == "Client" then typeEntry.clientMethods
 		else {}
-	for _, method in methods or {} do
-		if typeof(method.name) == "string" and matches(method.name, partial) then
-			itemsByLabel[method.name] = {
-				label = method.name,
-				kind = "Method",
-				detail = methodDetail(method),
-				documentation = "Fragua " .. facade .. " method",
-			}
+	if access == ":" then
+		for _, method in methods or {} do
+			if typeof(method.name) == "string" and matches(method.name, partial) then
+				itemsByLabel[method.name] = {
+					label = method.name,
+					kind = "Method",
+					detail = methodDetail(method),
+					documentation = "Fragua " .. facade .. " method",
+				}
+			end
 		end
 	end
 	for _, name in { "Clone", "Destroy", "Instance", "IsA", "TypeId" } do
-		if matches(name, partial) and not itemsByLabel[name] then
+		local kind = if name == "Instance" or name == "TypeId" then "Property" else "Method"
+		local expectedAccess = if kind == "Property" then "." else ":"
+		if access == expectedAccess and matches(name, partial) and not itemsByLabel[name] then
 			itemsByLabel[name] = {
 				label = name,
-				kind = if name == "Instance" or name == "TypeId" then "Property" else "Method",
+				kind = kind,
 				detail = "Fragua core member",
 				documentation = "Fragua wrapper member",
 			}
@@ -259,17 +280,17 @@ function AutocompleteModel.complete(request, surface, facade)
 		return typeItems(surface, partial, position)
 	end
 
-	local localName, memberPartial = currentLine:match("([%a_][%w_]*)%s*:%s*([%w_]*)$")
+	local localName, access, memberPartial = currentLine:match("([%a_][%w_]*)%s*([%.:])%s*([%w_]*)$")
 	if not localName then
 		return {}
 	end
-	local localTypes = inferLocals(source, position, surface, lines)
-	local typeId = localTypes[localName]
-	local typeEntry = typesById(surface)[typeId]
+	local localTypes = inferLocals(surface, lines)
+	local binding = localTypes[localName]
+	local typeEntry = binding and typesById(surface)[binding.typeId]
 	if not typeEntry then
 		return {}
 	end
-	return memberItems(typeEntry, facade or "Core", memberPartial, position)
+	return memberItems(typeEntry, binding.facade or facade or "Core", access, memberPartial, position)
 end
 
 function AutocompleteModel.extractContext(request): { string }
