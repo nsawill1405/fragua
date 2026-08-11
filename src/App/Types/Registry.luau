@@ -1,10 +1,12 @@
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
+local Selection = game:GetService("Selection")
 local ServerStorage = game:GetService("ServerStorage")
 
 local Constants = require(script.Parent.Parent.Shared.Constants)
 local BehaviorTemplatePolicy = require(script.Parent.BehaviorTemplatePolicy)
+local BackingClassResolver = require(script.Parent.BackingClassResolver)
 local EngineSchemas = require(script.Parent.EngineSchemas)
 local SchemaMigration = require(script.Parent.SchemaMigration)
 local SchemaResolver = require(script.Parent.SchemaResolver)
@@ -169,6 +171,10 @@ function Registry.get(id: string): TypeDef?
 		end
 	end
 	return nil
+end
+
+function Registry.getBackingClass(typeId: string): (string?, string?)
+	return BackingClassResolver.resolve(typeId, Registry.get)
 end
 
 local function typeModuleSource(def: TypeDef): string
@@ -368,20 +374,49 @@ function Registry.applyType(instance: Instance, typeId: string): boolean
 	return true
 end
 
+local function newBackingInstance(typeId: string): (Instance?, string?)
+	local backingClass, resolveErr = Registry.getBackingClass(typeId)
+	if not backingClass then
+		return nil, resolveErr
+	end
+	local ok, result = pcall(Instance.new, backingClass)
+	if not ok then
+		return nil, `Could not create backing class "{backingClass}": {result}`
+	end
+	return result, nil
+end
+
+local function hasEngineProperty(instance: Instance, name: string): boolean
+	return pcall(function()
+		local _ = (instance :: any)[name]
+	end)
+end
+
+local function applySchemaAttributes(instance: Instance, def: TypeDef)
+	for _, prop in Registry.resolvedSchema(def) do
+		if
+			prop.name ~= "Name"
+			and prop.name ~= "Archivable"
+			and prop.name ~= "ClassName"
+			and not hasEngineProperty(instance, prop.name)
+			and instance:GetAttribute(prop.name) == nil
+			and prop.default ~= nil
+		then
+			instance:SetAttribute(prop.name, prop.default)
+		end
+	end
+end
+
 function Registry.createInstance(typeId: string, parent: Instance?): Instance
 	local def = Registry.get(typeId)
 	assert(def, `Unknown Fragua type: {typeId}`)
 
-	local inst = Instance.new("Configuration")
+	local inst, createErr = newBackingInstance(typeId)
+	assert(inst, createErr)
 	inst.Name = def.name
 	inst:SetAttribute(Constants.TYPE_ATTR, def.id)
 	CollectionService:AddTag(inst, Constants.TAG)
-
-	for _, prop in Registry.resolvedSchema(def) do
-		if prop.name ~= "Name" and prop.name ~= "Archivable" then
-			inst:SetAttribute(prop.name, prop.default)
-		end
-	end
+	applySchemaAttributes(inst, def)
 
 	Registry.ensureBehaviorTemplate(def.id)
 
@@ -393,6 +428,88 @@ function Registry.createInstance(typeId: string, parent: Instance?): Instance
 	inst.Parent = parent
 	Registry.applyBehaviorTemplate(inst, def.id)
 	return inst
+end
+
+local function setEngineProperty(instance: Instance, name: string, value: any): boolean
+	return pcall(function()
+		local current = (instance :: any)[name]
+		if typeof(current) == "EnumItem" and typeof(value) == "string" then
+			local item = (current.EnumType :: any)[value]
+			if item then
+				(instance :: any)[name] = item
+				return
+			end
+		end
+		(instance :: any)[name] = value
+	end)
+end
+
+function Registry.upgradeBackingInstance(instance: Instance): (Instance?, string?)
+	local typeId = Registry.getTypeId(instance)
+	if not typeId then
+		return nil, "Instance has no Fragua type"
+	end
+	local def = Registry.get(typeId)
+	if not def then
+		return nil, `Unknown Fragua type: {typeId}`
+	end
+	local backingClass, resolveErr = Registry.getBackingClass(typeId)
+	if not backingClass then
+		return nil, resolveErr
+	end
+	if instance.ClassName == backingClass then
+		return instance, nil
+	end
+
+	local replacement, createErr = newBackingInstance(typeId)
+	if not replacement then
+		return nil, createErr
+	end
+	ChangeHistoryService:SetWaypoint("Fragua Upgrade Backing Instance")
+
+	local oldParent = instance.Parent
+	local oldSelection = Selection:Get()
+	local replacementSelection = {}
+	for _, selected in oldSelection do
+		table.insert(replacementSelection, if selected == instance then replacement else selected)
+	end
+
+	replacement.Name = instance.Name
+	replacement.Archivable = instance.Archivable
+	for name, value in instance:GetAttributes() do
+		replacement:SetAttribute(name, value)
+	end
+	for _, tag in CollectionService:GetTags(instance) do
+		CollectionService:AddTag(replacement, tag)
+	end
+	for _, prop in Registry.resolvedSchema(def) do
+		if prop.name == "Name" or prop.name == "Archivable" or prop.name == "ClassName" or prop.readonly then
+			continue
+		end
+		local gotNative, value = pcall(function()
+			return (instance :: any)[prop.name]
+		end)
+		if not gotNative then
+			value = instance:GetAttribute(prop.name)
+		end
+		if value ~= nil and hasEngineProperty(replacement, prop.name) then
+			if setEngineProperty(replacement, prop.name, value) then
+				replacement:SetAttribute(prop.name, nil)
+			end
+		end
+	end
+
+	for _, child in instance:GetChildren() do
+		child.Parent = replacement
+	end
+	replacement.Parent = oldParent
+	Selection:Set(replacementSelection)
+	instance:Destroy()
+	Registry.ensureBehaviorTemplate(typeId)
+	Registry.applyBehaviorTemplate(replacement, typeId)
+	fireChanged()
+	ChangeHistoryService:SetWaypoint("Fragua Upgrade Backing Instance Done")
+	return replacement, nil
 end
 
 function Registry.seedDefaults()

@@ -1,6 +1,7 @@
 local ok, Schemas = pcall(function()
 	return require("../src/App/Types/EngineClassSchemas")
 end)
+local Catalog = require("../src/App/Types/EnginePropertyCatalog")
 
 local function byName(rows)
 	local result = {}
@@ -11,6 +12,86 @@ local function byName(rows)
 end
 
 return {
+	["every curated service inherits Instance identity and archive rows"] = function()
+		local services = {
+			"Workspace",
+			"Players",
+			"Lighting",
+			"MaterialService",
+			"ReplicatedFirst",
+			"ReplicatedStorage",
+			"ServerScriptService",
+			"ServerStorage",
+			"StarterGui",
+			"StarterPack",
+			"StarterPlayer",
+			"Teams",
+			"SoundService",
+			"TextChatService",
+		}
+		for _, className in services do
+			local rows = byName(Schemas.forClass(className))
+			assert(rows.Name and rows.Name.readonly ~= true, `{className} should inherit writable Name`)
+			assert(rows.ClassName and rows.ClassName.readonly == true, `{className} should inherit read-only ClassName`)
+			assert(rows.Archivable and rows.Archivable.readonly ~= true, `{className} should inherit Archivable`)
+		end
+
+		for className, propertyName in
+			{
+				Workspace = "Gravity",
+				Players = "RespawnTime",
+				Lighting = "Ambient",
+				StarterGui = "ScreenOrientation",
+				SoundService = "AmbientReverb",
+			}
+		do
+			assert(byName(Schemas.forClass(className))[propertyName], `{className} should retain {propertyName}`)
+		end
+	end,
+	["StarterPlayer exposes current scriptable settings with enum families"] = function()
+		local rows = byName(Schemas.forClass("StarterPlayer"))
+		for _, name in
+			{
+				"CameraMaxZoomDistance",
+				"CameraMinZoomDistance",
+				"CharacterWalkSpeed",
+				"CharacterJumpPower",
+				"CharacterUseJumpPower",
+				"EnableMouseLockOption",
+				"HealthDisplayDistance",
+				"NameDisplayDistance",
+				"LoadCharacterAppearance",
+			}
+		do
+			assert(rows[name], `StarterPlayer should expose {name}`)
+		end
+		assert(rows.CameraMode and rows.CameraMode.enumType == "CameraMode")
+		assert(rows.DevComputerMovementMode and rows.DevComputerMovementMode.enumType == "DevComputerMovementMode")
+		assert(rows.DevTouchMovementMode and rows.DevTouchMovementMode.enumType == "DevTouchMovementMode")
+	end,
+	["Teams and Team remain distinct while sharing Instance rows"] = function()
+		local teams = byName(Schemas.forClass("Teams"))
+		assert(teams.Name and teams.ClassName and teams.Archivable)
+		assert(not teams.AutoAssignable and not teams.TeamColor)
+
+		local team = byName(Schemas.forClass("Team"))
+		assert(team.Name and team.ClassName and team.Archivable)
+		assert(team.AutoAssignable and team.AutoAssignable.valueType == "boolean")
+		assert(team.TeamColor and team.TeamColor.valueType == "BrickColor")
+	end,
+	["custom inheritance schemas consume the Properties dock catalog"] = function()
+		for _, className in { "StarterPlayer", "Team" } do
+			local catalogRows = byName(Catalog.forClass(className))
+			local schemaRows = byName(Schemas.forClass(className))
+			for name, catalogRow in catalogRows do
+				local schemaRow = schemaRows[name]
+				assert(schemaRow, `{className}.{name} should reach custom inheritance schemas`)
+				assert(schemaRow.valueType == catalogRow.valueType)
+				assert(schemaRow.enumType == catalogRow.enumType)
+				assert(schemaRow.readonly == catalogRow.readonly)
+			end
+		end
+	end,
 	["VehicleSeat exposes vehicle and inherited BasePart properties"] = function()
 		assert(ok and Schemas, "EngineClassSchemas should be available")
 		local rows = byName(Schemas.forClass("VehicleSeat"))
@@ -46,7 +127,8 @@ return {
 		assert(ok and Schemas, "EngineClassSchemas should be available")
 		local part = byName(Schemas.forClass("Part"))
 		local truss = byName(Schemas.forClass("TrussPart"))
-		assert(part.Shape and part.Shape.enumType == "PartType")
+		assert(part.Anchored and part.Anchored.default == false)
+		assert(part.Shape and part.Shape.enumType == "PartType" and part.Shape.default == "Block")
 		assert(truss.Style and truss.Style.enumType == "Style")
 		assert(table.find(truss.Style.enumItems, "BridgeStyleSupports"))
 		assert(not table.find(truss.Style.enumItems, "BridgeStyle"))
