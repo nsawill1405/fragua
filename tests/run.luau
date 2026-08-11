@@ -5,6 +5,7 @@ TestRunner.run({
 	TypeValue = require("./TypeValue.spec"),
 	TypeDraft = require("./TypeDraft.spec"),
 	BackingClassResolver = require("./BackingClassResolver.spec"),
+	BackingUpgradePolicy = require("./BackingUpgradePolicy.spec"),
 	SchemaMigration = require("./SchemaMigration.spec"),
 	ColorText = require("./ColorText.spec"),
 	PreviewCommit = require("./PreviewCommit.spec"),

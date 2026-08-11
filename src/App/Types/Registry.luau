@@ -7,6 +7,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Constants = require(script.Parent.Parent.Shared.Constants)
 local BehaviorTemplatePolicy = require(script.Parent.BehaviorTemplatePolicy)
 local BackingClassResolver = require(script.Parent.BackingClassResolver)
+local BackingUpgradePolicy = require(script.Parent.BackingUpgradePolicy)
 local EngineSchemas = require(script.Parent.EngineSchemas)
 local SchemaMigration = require(script.Parent.SchemaMigration)
 local SchemaResolver = require(script.Parent.SchemaResolver)
@@ -476,7 +477,8 @@ function Registry.upgradeBackingInstance(instance: Instance): (Instance?, string
 
 	replacement.Name = instance.Name
 	replacement.Archivable = instance.Archivable
-	for name, value in instance:GetAttributes() do
+	local sourceAttributes = instance:GetAttributes()
+	for name, value in sourceAttributes do
 		replacement:SetAttribute(name, value)
 	end
 	for _, tag in CollectionService:GetTags(instance) do
@@ -486,14 +488,14 @@ function Registry.upgradeBackingInstance(instance: Instance): (Instance?, string
 		if prop.name == "Name" or prop.name == "Archivable" or prop.name == "ClassName" or prop.readonly then
 			continue
 		end
-		local gotNative, value = pcall(function()
+		local gotNative, nativeValue = pcall(function()
 			return (instance :: any)[prop.name]
 		end)
-		if not gotNative then
-			value = instance:GetAttribute(prop.name)
-		end
+		local hasAttribute = sourceAttributes[prop.name] ~= nil
+		local value, preserveAttribute =
+			BackingUpgradePolicy.sourceValue(hasAttribute, sourceAttributes[prop.name], gotNative, nativeValue)
 		if value ~= nil and hasEngineProperty(replacement, prop.name) then
-			if setEngineProperty(replacement, prop.name, value) then
+			if setEngineProperty(replacement, prop.name, value) and not preserveAttribute then
 				replacement:SetAttribute(prop.name, nil)
 			end
 		end
