@@ -1,6 +1,7 @@
 local ok, Model = pcall(function()
 	return require("../src/App/Types/DefaultControlModel")
 end)
+local TypeValue = require("../src/App/Types/TypeValue")
 
 return {
 	["describes the standard typed defaults"] = function()
@@ -18,15 +19,40 @@ return {
 		assert(Model.describe({ valueType = "UDim2" }).height == 72)
 		assert(Model.describe({ valueType = "CFrame" }).height == 96)
 	end,
-	["only gives finite bounded numbers a slider with ordered bounds"] = function()
+	["only gives finite strictly increasing number bounds a slider"] = function()
 		assert(ok and Model, "DefaultControlModel should be available")
 		local unbounded = Model.describe({ valueType = "number", minimum = 0 })
 		assert(unbounded.kind == "number")
 		local infinite = Model.describe({ valueType = "number", minimum = 0, maximum = math.huge })
 		assert(infinite.kind == "number")
-		local bounded = Model.describe({ valueType = "number", minimum = 10, maximum = -2 })
-		assert(bounded.kind == "slider")
-		assert(bounded.options.minimum == -2 and bounded.options.maximum == 10)
+	end,
+	["descending bounds stay numeric and preserve validation semantics"] = function()
+		assert(ok and Model, "DefaultControlModel should be available")
+		local metadata = { valueType = "number", minimum = 10, maximum = -2 }
+		assert(Model.describe(metadata).kind == "number")
+		local valid = TypeValue.validate(metadata.valueType, 4, metadata)
+		assert(not valid)
+	end,
+	["equal bounds stay numeric and accept only the declared value"] = function()
+		assert(ok and Model, "DefaultControlModel should be available")
+		local metadata = { valueType = "number", minimum = 5, maximum = 5 }
+		assert(Model.describe(metadata).kind == "number")
+		assert(TypeValue.validate(metadata.valueType, 5, metadata))
+		assert(not TypeValue.validate(metadata.valueType, 5.5, metadata))
+	end,
+	["bounded integers stay numeric because fractional values are invalid"] = function()
+		assert(ok and Model, "DefaultControlModel should be available")
+		local metadata = { valueType = "integer", minimum = 0, maximum = 10 }
+		assert(Model.describe(metadata).kind == "number")
+		assert(not TypeValue.validate(metadata.valueType, 4.5, metadata))
+	end,
+	["bounded number sliders produce valid fractional values"] = function()
+		assert(ok and Model, "DefaultControlModel should be available")
+		local metadata = { valueType = "number", minimum = -2, maximum = 10 }
+		local control = Model.describe(metadata)
+		assert(control.kind == "slider")
+		assert(control.options.minimum == -2 and control.options.maximum == 10)
+		assert(TypeValue.validate(metadata.valueType, 4.5, metadata))
 	end,
 	["falls back safely for absent or unsupported metadata"] = function()
 		assert(ok and Model, "DefaultControlModel should be available")
