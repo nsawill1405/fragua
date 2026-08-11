@@ -21,6 +21,7 @@ TestRunner.run({
 	MetadataModel = require("./MetadataModel.spec"),
 	BehaviorModel = require("./BehaviorModel.spec"),
 	BehaviorTemplatePolicy = require("./BehaviorTemplatePolicy.spec"),
+	ScriptContext = require("./ScriptContext.spec"),
 	ScriptHeader = require("./ScriptHeader.spec"),
 	ScriptUpdateGate = require("./ScriptUpdateGate.spec"),
 	TypeCatalog = require("./TypeCatalog.spec"),
