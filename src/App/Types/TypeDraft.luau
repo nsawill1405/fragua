@@ -66,7 +66,7 @@ function TypeDraft.addProperty(draft, categoryId: string, name: string, valueTyp
 		name = name,
 		valueType = valueType,
 	}
-	if typeof(defaultInput) == "string" then
+	if typeof(defaultInput) == "string" and valueType ~= "string" and valueType ~= "enum" then
 		property.defaultText = defaultInput
 		local parsed, value = Util.parseValue(valueType, defaultInput)
 		if parsed then
@@ -99,7 +99,7 @@ function TypeDraft.updateProperty(draft, propertyId: string, changes)
 	for key, value in changes do
 		property[key] = value
 	end
-	if changes.defaultText ~= nil or changes.valueType ~= nil then
+	if changes.defaultText ~= nil then
 		local parsed, value = Util.parseValue(property.valueType, property.defaultText or "")
 		if parsed then
 			property.defaultValue = value
@@ -111,7 +111,15 @@ function TypeDraft.updateProperty(draft, propertyId: string, changes)
 	elseif changes.defaultValue ~= nil then
 		property.defaultInputError = nil
 		property.defaultText = Util.formatValue(property.defaultValue)
+	elseif changes.valueType ~= nil then
+		property.defaultValue = TypeValue.default(property.valueType, property)
+		property.defaultInputError = nil
+		property.defaultText = Util.formatValue(property.defaultValue)
 	end
+end
+
+function TypeDraft.snapshotCategoryOrder(draft): { string }
+	return table.clone(draft.categoryOrder)
 end
 
 function TypeDraft.snapshotEditableProperties(draft)

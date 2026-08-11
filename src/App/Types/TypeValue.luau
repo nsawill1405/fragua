@@ -1,5 +1,7 @@
 local TypeValue = {}
 
+local Constants = if script then require(script.Parent.Parent.Shared.Constants) else require("../Shared/Constants")
+
 local luneAvailable, LuneRoblox = pcall(function()
 	return require("@lune/roblox")
 end)
@@ -104,16 +106,52 @@ function TypeValue.validate(valueType: string, value: any, metadata: table?): (b
 		end
 		return true
 	elseif valueType == "Instance" or valueType == "FraguaInstance" then
+		local referenceType = if metadata then metadata.referenceType else nil
+		if valueType == "FraguaInstance" and (typeof(referenceType) ~= "string" or referenceType == "") then
+			return false, "Choose a Fragua reference type."
+		end
 		if value == nil then
 			return true
 		end
-		return false, "Object reference defaults are not supported."
+		if typeof(value) ~= "Instance" then
+			return false, "Expected an Instance reference."
+		end
+		if valueType == "FraguaInstance" then
+			local typeId = value:GetAttribute(Constants.TYPE_ATTR)
+			if typeof(typeId) ~= "string" or typeId == "" then
+				return false, "Expected a Fragua instance reference."
+			end
+			if typeId ~= referenceType then
+				return false, `Expected a {referenceType} reference, got {typeId}.`
+			end
+		end
+		return true
 	end
 
 	if typeof(value) ~= valueType then
 		return false, `Expected a {valueType} value.`
 	end
 	return true
+end
+
+function TypeValue.referenceMarker(propertyName: string)
+	assert(propertyName ~= "", "Reference property name required")
+	return {
+		__typeof = "ObjectReference",
+		property = propertyName,
+	}
+end
+
+function TypeValue.referenceProperty(value: any): string?
+	if
+		typeof(value) == "table"
+		and value.__typeof == "ObjectReference"
+		and typeof(value.property) == "string"
+		and value.property ~= ""
+	then
+		return value.property
+	end
+	return nil
 end
 
 function TypeValue.serialize(value: any): any

@@ -41,6 +41,9 @@ export type TypeDef = {
 
 local Registry = {}
 
+local REFERENCE_PREFIX = "_FraguaRef_"
+local MANAGED_ATTRIBUTE = "_FraguaManaged"
+
 local changedBindable = Instance.new("BindableEvent")
 Registry.Changed = changedBindable.Event
 
@@ -71,10 +74,11 @@ end
 local function encodeType(def: TypeDef): string
 	local props = {}
 	for _, prop in def.properties do
+		local reference = prop.valueType == "Instance" or prop.valueType == "FraguaInstance"
 		table.insert(props, {
 			name = prop.name,
 			valueType = prop.valueType,
-			default = TypeValue.serialize(prop.default),
+			default = if reference then TypeValue.referenceMarker(prop.name) else TypeValue.serialize(prop.default),
 			category = prop.category,
 			readonly = prop.readonly,
 			enumItems = prop.enumItems,
@@ -94,6 +98,21 @@ local function encodeType(def: TypeDef): string
 		icon = def.icon,
 		properties = props,
 	})
+end
+
+local function hydrateReferenceDefaults(container: Instance, def: TypeDef): TypeDef
+	for _, prop in def.properties do
+		if prop.valueType == "Instance" or prop.valueType == "FraguaInstance" then
+			local markerProperty = TypeValue.referenceProperty(prop.default)
+			if markerProperty == prop.name or (markerProperty == nil and prop.default == nil) then
+				local reference = container:FindFirstChild(REFERENCE_PREFIX .. prop.name)
+				prop.default = if reference and reference:IsA("ObjectValue") then reference.Value else nil
+			else
+				prop.default = nil
+			end
+		end
+	end
+	return def
 end
 
 local function decodeType(raw: string): TypeDef?
@@ -144,10 +163,12 @@ end
 
 local function decodeTypeContainer(container: Instance): TypeDef?
 	if container:IsA("ModuleScript") then
-		return decodeTypeModule(container)
+		local def = decodeTypeModule(container)
+		return if def then hydrateReferenceDefaults(container, def) else nil
 	end
 	if container:IsA("StringValue") then
-		return decodeType(container.Value)
+		local def = decodeType(container.Value)
+		return if def then hydrateReferenceDefaults(container, def) else nil
 	end
 	return nil
 end
@@ -180,6 +201,9 @@ function Registry.list(): { TypeDef }
 				local required, result = pcall(require, child)
 				if required and typeof(result) == "string" then
 					def = decodeType(result)
+					if def then
+						def = hydrateReferenceDefaults(child, def)
+					end
 				end
 			end
 			if def then
@@ -209,6 +233,41 @@ end
 local function typeModuleSource(def: TypeDef): string
 	local json = encodeType(def)
 	return `-- Fragua type definition: {def.id}\nreturn [[\n{json}\n]]\n`
+end
+
+local function syncDefinitionReferences(container: Instance, def: TypeDef)
+	local active = {}
+	for _, prop in def.properties do
+		if prop.valueType == "Instance" or prop.valueType == "FraguaInstance" then
+			local name = REFERENCE_PREFIX .. prop.name
+			active[name] = true
+			local existing = container:FindFirstChild(name)
+			local reference
+			if existing and existing:IsA("ObjectValue") then
+				reference = existing
+			else
+				if existing then
+					existing:Destroy()
+				end
+				reference = Instance.new("ObjectValue")
+				reference.Name = name
+				reference.Parent = container
+			end
+			reference:SetAttribute(MANAGED_ATTRIBUTE, true)
+			reference.Value = if typeof(prop.default) == "Instance" then prop.default else nil
+		end
+	end
+
+	for _, child in container:GetChildren() do
+		if
+			child:IsA("ObjectValue")
+			and child:GetAttribute(MANAGED_ATTRIBUTE) == true
+			and string.sub(child.Name, 1, #REFERENCE_PREFIX) == REFERENCE_PREFIX
+			and not active[child.Name]
+		then
+			child:Destroy()
+		end
+	end
 end
 
 function Registry.save(def: TypeDef)
@@ -253,11 +312,13 @@ function Registry.save(def: TypeDef)
 	local existing = findTypeDefinition(folder, def.id)
 	if existing and existing:IsA("ModuleScript") then
 		existing.Source = source
+		syncDefinitionReferences(existing, def)
 	else
 		local module = Instance.new("ModuleScript")
 		module.Name = def.id
 		module.Source = source
 		module.Parent = folder
+		syncDefinitionReferences(module, def)
 		if existing then
 			existing:Destroy()
 		end
@@ -379,14 +440,30 @@ function Registry.migrateInstances(typeId: string, previous: TypeDef?, nextDef: 
 				inst:SetAttribute(renameTo, value)
 			end
 			inst:SetAttribute(renameFrom, nil)
+			local reference = inst:FindFirstChild(REFERENCE_PREFIX .. renameFrom)
+			if reference and reference:IsA("ObjectValue") then
+				reference.Name = REFERENCE_PREFIX .. renameTo
+			end
 		end
 		for name in pairs(oldNames) do
 			if not newProps[name] and not WrapperPolicy.isReserved(name, {}) and name ~= renameTo then
 				inst:SetAttribute(name, nil)
+				local reference = inst:FindFirstChild(REFERENCE_PREFIX .. name)
+				if reference and reference:IsA("ObjectValue") then
+					reference:Destroy()
+				end
 			end
 		end
 		for name, prop in pairs(newProps) do
-			if not WrapperPolicy.isReserved(name, {}) and inst:GetAttribute(name) == nil then
+			if prop.valueType == "Instance" or prop.valueType == "FraguaInstance" then
+				if not inst:FindFirstChild(REFERENCE_PREFIX .. name) then
+					local reference = Instance.new("ObjectValue")
+					reference.Name = REFERENCE_PREFIX .. name
+					reference:SetAttribute(MANAGED_ATTRIBUTE, true)
+					reference.Value = if typeof(prop.default) == "Instance" then prop.default else nil
+					reference.Parent = inst
+				end
+			elseif not WrapperPolicy.isReserved(name, {}) and inst:GetAttribute(name) == nil then
 				inst:SetAttribute(name, prop.default)
 			end
 		end
@@ -432,7 +509,15 @@ function Registry.applyType(instance: Instance, typeId: string): boolean
 	instance:SetAttribute(Constants.TYPE_ATTR, def.id)
 	CollectionService:AddTag(instance, Constants.TAG)
 	for _, prop in Registry.resolvedSchema(def) do
-		if prop.name ~= "Name" and prop.name ~= "Archivable" and instance:GetAttribute(prop.name) == nil then
+		if prop.valueType == "Instance" or prop.valueType == "FraguaInstance" then
+			if not instance:FindFirstChild(REFERENCE_PREFIX .. prop.name) then
+				local reference = Instance.new("ObjectValue")
+				reference.Name = REFERENCE_PREFIX .. prop.name
+				reference:SetAttribute(MANAGED_ATTRIBUTE, true)
+				reference.Value = if typeof(prop.default) == "Instance" then prop.default else nil
+				reference.Parent = instance
+			end
+		elseif prop.name ~= "Name" and prop.name ~= "Archivable" and instance:GetAttribute(prop.name) == nil then
 			instance:SetAttribute(prop.name, prop.default)
 		end
 	end
@@ -464,7 +549,13 @@ end
 
 local function applySchemaAttributes(instance: Instance, def: TypeDef)
 	for _, prop in Registry.resolvedSchema(def) do
-		if
+		if prop.valueType == "Instance" or prop.valueType == "FraguaInstance" then
+			local reference = Instance.new("ObjectValue")
+			reference.Name = REFERENCE_PREFIX .. prop.name
+			reference:SetAttribute(MANAGED_ATTRIBUTE, true)
+			reference.Value = if typeof(prop.default) == "Instance" then prop.default else nil
+			reference.Parent = instance
+		elseif
 			prop.name ~= "Name"
 			and prop.name ~= "Archivable"
 			and prop.name ~= "ClassName"
