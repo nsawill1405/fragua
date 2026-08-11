@@ -31,4 +31,5 @@ TestRunner.run({
 	TypeSurface = require("./TypeSurface.spec"),
 	ApiSource = require("./ApiSource.spec"),
 	AutocompleteModel = require("./AutocompleteModel.spec"),
+	AutocompleteProvider = require("./AutocompleteProvider.spec"),
 })
