@@ -2,6 +2,7 @@ local TestRunner = require("./TestRunner")
 
 TestRunner.run({
 	InteractionMath = require("./InteractionMath.spec"),
+	TypeValue = require("./TypeValue.spec"),
 	TypeDraft = require("./TypeDraft.spec"),
 	SchemaMigration = require("./SchemaMigration.spec"),
 	ColorText = require("./ColorText.spec"),

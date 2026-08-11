@@ -8,8 +8,22 @@ local BehaviorTemplatePolicy = require(script.Parent.BehaviorTemplatePolicy)
 local EngineSchemas = require(script.Parent.EngineSchemas)
 local SchemaMigration = require(script.Parent.SchemaMigration)
 local SchemaResolver = require(script.Parent.SchemaResolver)
+local TypeValue = require(script.Parent.TypeValue)
 
-export type PropDef = EngineSchemas.PropDef
+export type PropDef = {
+	name: string,
+	valueType: string,
+	default: any,
+	category: string,
+	readonly: boolean?,
+	enumItems: { string }?,
+	enumType: string?,
+	minimum: number?,
+	maximum: number?,
+	step: number?,
+	multiline: boolean?,
+	referenceType: string?,
+}
 
 export type TypeDef = {
 	id: string,
@@ -49,35 +63,22 @@ function Registry.typesFolder(): Folder
 	return Registry.ensureRoot():FindFirstChild(Constants.TYPES_FOLDER) :: Folder
 end
 
-local function serializeDefault(value: any): any
-	local t = typeof(value)
-	if t == "Color3" then
-		return { __typeof = "Color3", R = value.R, G = value.G, B = value.B }
-	elseif t == "Vector3" then
-		return { __typeof = "Vector3", X = value.X, Y = value.Y, Z = value.Z }
-	end
-	return value
-end
-
-local function deserializeDefault(value: any): any
-	if typeof(value) == "table" and value.__typeof == "Color3" then
-		return Color3.new(value.R, value.G, value.B)
-	elseif typeof(value) == "table" and value.__typeof == "Vector3" then
-		return Vector3.new(value.X, value.Y, value.Z)
-	end
-	return value
-end
-
 local function encodeType(def: TypeDef): string
 	local props = {}
 	for _, prop in def.properties do
 		table.insert(props, {
 			name = prop.name,
 			valueType = prop.valueType,
-			default = serializeDefault(prop.default),
+			default = TypeValue.serialize(prop.default),
 			category = prop.category,
 			readonly = prop.readonly,
 			enumItems = prop.enumItems,
+			enumType = prop.enumType,
+			minimum = prop.minimum,
+			maximum = prop.maximum,
+			step = prop.step,
+			multiline = prop.multiline,
+			referenceType = prop.referenceType,
 		})
 	end
 	return HttpService:JSONEncode({
@@ -104,10 +105,16 @@ local function decodeType(raw: string): TypeDef?
 				table.insert(props, {
 					name = prop.name,
 					valueType = prop.valueType or "string",
-					default = deserializeDefault(prop.default),
+					default = TypeValue.deserialize(prop.default),
 					category = prop.category or "Data",
 					readonly = prop.readonly,
 					enumItems = prop.enumItems,
+					enumType = prop.enumType,
+					minimum = prop.minimum,
+					maximum = prop.maximum,
+					step = prop.step,
+					multiline = prop.multiline,
+					referenceType = prop.referenceType,
 				})
 			end
 		end
