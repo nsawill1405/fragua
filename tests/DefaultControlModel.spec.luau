@@ -46,13 +46,27 @@ return {
 		assert(Model.describe(metadata).kind == "number")
 		assert(not TypeValue.validate(metadata.valueType, 4.5, metadata))
 	end,
-	["bounded number sliders produce valid fractional values"] = function()
+	["positive finite steps stay numeric because continuous values are invalid"] = function()
+		assert(ok and Model, "DefaultControlModel should be available")
+		local metadata = { valueType = "number", minimum = 0, maximum = 10, step = 2 }
+		assert(not TypeValue.validate(metadata.valueType, 1, metadata))
+		assert(Model.describe(metadata).kind == "number")
+	end,
+	["unstepped bounded number sliders produce valid fractional values"] = function()
 		assert(ok and Model, "DefaultControlModel should be available")
 		local metadata = { valueType = "number", minimum = -2, maximum = 10 }
 		local control = Model.describe(metadata)
 		assert(control.kind == "slider")
 		assert(control.options.minimum == -2 and control.options.maximum == 10)
 		assert(TypeValue.validate(metadata.valueType, 4.5, metadata))
+	end,
+	["ignored numeric steps preserve continuous slider validation"] = function()
+		assert(ok and Model, "DefaultControlModel should be available")
+		for _, step in { 0, -2, math.huge, -math.huge, 0 / 0 } do
+			local metadata = { valueType = "number", minimum = 0, maximum = 10, step = step }
+			assert(TypeValue.validate(metadata.valueType, 1, metadata))
+			assert(Model.describe(metadata).kind == "slider")
+		end
 	end,
 	["falls back safely for absent or unsupported metadata"] = function()
 		assert(ok and Model, "DefaultControlModel should be available")

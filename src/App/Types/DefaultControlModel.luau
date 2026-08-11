@@ -36,7 +36,13 @@ function DefaultControlModel.describe(prop: any)
 		local items = if typeof(prop.enumItems) == "table" then table.clone(prop.enumItems) else {}
 		return descriptor("enum", 22, { items = items })
 	elseif valueType == "number" then
-		if isFiniteNumber(prop.minimum) and isFiniteNumber(prop.maximum) and prop.minimum < prop.maximum then
+		local hasPositiveFiniteStep = isFiniteNumber(prop.step) and prop.step > 0
+		if
+			isFiniteNumber(prop.minimum)
+			and isFiniteNumber(prop.maximum)
+			and prop.minimum < prop.maximum
+			and not hasPositiveFiniteStep
+		then
 			return descriptor("slider", 22, { minimum = prop.minimum, maximum = prop.maximum })
 		end
 		return descriptor("number", 22)
