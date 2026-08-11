@@ -1,6 +1,7 @@
 local ok, TypeCatalog = pcall(function()
 	return require("../src/App/Runtime/TypeCatalog")
 end)
+local fs = require("@lune/fs")
 
 return {
 	["snapshot contains resolved inherited defaults"] = function()
@@ -20,5 +21,12 @@ return {
 		end)
 		property.default = 0
 		assert(rows[1].properties[1].default == 100)
+	end,
+	["runtime catalog does not call the removed unsided behavior API"] = function()
+		local source = fs.readFile("src/App/Runtime/TypeCatalog.luau")
+		assert(
+			not source:find("registry.getSharedBehavior", 1, true),
+			"TypeCatalog.sync must not call removed Registry.getSharedBehavior"
+		)
 	end,
 }

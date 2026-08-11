@@ -133,28 +133,54 @@ local function decodeType(raw: string): TypeDef?
 	}
 end
 
+local function decodeTypeModule(module: ModuleScript): TypeDef?
+	local source = module.Source
+	local startPos = string.find(source, "[[", 1, true)
+	local endPos = startPos and string.find(source, "]]", startPos + 2, true)
+	local sourceRaw = if startPos and endPos then string.sub(source, startPos + 2, endPos - 1) else source
+	return decodeType(sourceRaw)
+end
+
+local function decodeTypeContainer(container: Instance): TypeDef?
+	if container:IsA("ModuleScript") then
+		return decodeTypeModule(container)
+	end
+	if container:IsA("StringValue") then
+		return decodeType(container.Value)
+	end
+	return nil
+end
+
+local function findTypeDefinition(folder: Folder, id: string): Instance?
+	for _, child in folder:GetChildren() do
+		if child.Name == id then
+			local def = decodeTypeContainer(child)
+			if def and def.id == id then
+				return child
+			end
+		end
+	end
+	return nil
+end
+
 function Registry.list(): { TypeDef }
 	local folder = Registry.typesFolder()
 	local types: { TypeDef } = {}
 	for _, child in folder:GetChildren() do
 		if child:IsA("ModuleScript") or child:IsA("StringValue") then
-			local raw: string
-			if child:IsA("StringValue") then
-				raw = child.Value
-			else
-				-- Decode current Source first. require() caches old values after Source edits.
-				local source = child.Source
-				local startPos = string.find(source, "[[", 1, true)
-				local endPos = startPos and string.find(source, "]]", startPos + 2, true)
-				local sourceRaw = if startPos and endPos then string.sub(source, startPos + 2, endPos - 1) else source
-				if decodeType(sourceRaw) then
-					raw = sourceRaw
-				else
-					local ok, result = pcall(require, child)
-					raw = if ok and typeof(result) == "string" then result else sourceRaw
+			-- Decode current Source first. require() caches old values after Source edits.
+			local def = decodeTypeContainer(child)
+			if
+				not def
+				and child:IsA("ModuleScript")
+				and child:GetAttribute("_FraguaSharedBehavior") ~= true
+				and child:GetAttribute("_FraguaBehaviorSide") == nil
+			then
+				local required, result = pcall(require, child)
+				if required and typeof(result) == "string" then
+					def = decodeType(result)
 				end
 			end
-			local def = decodeType(raw)
 			if def then
 				table.insert(types, def)
 			end
@@ -188,7 +214,7 @@ function Registry.save(def: TypeDef)
 	assert(def.id ~= "", "Type id required")
 	local folder = Registry.typesFolder()
 	local source = typeModuleSource(def)
-	local existing = folder:FindFirstChild(def.id)
+	local existing = findTypeDefinition(folder, def.id)
 	if existing and existing:IsA("ModuleScript") then
 		existing.Source = source
 	else
@@ -248,7 +274,7 @@ end
 
 function Registry.delete(id: string): boolean
 	local folder = Registry.typesFolder()
-	local existing = folder:FindFirstChild(id)
+	local existing = findTypeDefinition(folder, id)
 	if not existing then
 		return false
 	end
@@ -261,14 +287,17 @@ function Registry.delete(id: string): boolean
 	end
 
 	for _, side in BehaviorModel.SIDES do
-		local behaviorTemplate = folder:FindFirstChild(BehaviorModel.name(id, side))
-		if behaviorTemplate then
-			behaviorTemplate:Destroy()
+		local behaviorName = BehaviorModel.name(id, side)
+		for _, child in folder:GetChildren() do
+			if child.Name == behaviorName and child:IsA("ModuleScript") and not decodeTypeModule(child) then
+				child:Destroy()
+			end
 		end
 	end
-	local legacyBehavior = folder:FindFirstChild(id .. "Behavior")
-	if legacyBehavior then
-		legacyBehavior:Destroy()
+	for _, child in folder:GetChildren() do
+		if child.Name == id .. "Behavior" and child:IsA("ModuleScript") and not decodeTypeModule(child) then
+			child:Destroy()
+		end
 	end
 
 	existing:Destroy()
@@ -685,7 +714,7 @@ local function canonicalizeNamedBehavior(
 	local candidates = {}
 	local sources = {}
 	for _, child in Registry.typesFolder():GetChildren() do
-		if child.Name == behaviorName and child:IsA("ModuleScript") then
+		if child.Name == behaviorName and child:IsA("ModuleScript") and not decodeTypeModule(child) then
 			table.insert(candidates, child)
 			table.insert(sources, child.Source)
 		end
@@ -733,8 +762,14 @@ function Registry.canonicalizeBehaviorTemplate(typeId: string, side: string): Mo
 end
 
 local function migrateLegacyBehavior(typeId: string)
+	local sidedTemplates = {}
+	local sidedSources = {}
 	for _, side in BehaviorModel.SIDES do
-		Registry.canonicalizeBehaviorTemplate(typeId, side)
+		local template = Registry.canonicalizeBehaviorTemplate(typeId, side)
+		if template then
+			sidedTemplates[side] = template
+			sidedSources[side] = template.Source
+		end
 	end
 
 	local legacy = canonicalizeLegacyBehavior(typeId)
@@ -742,24 +777,32 @@ local function migrateLegacyBehavior(typeId: string)
 		return
 	end
 
-	-- Preserve the winning legacy source before it becomes the canonical Edit template.
+	local migration = BehaviorTemplatePolicy.legacyMigrationPlan(
+		legacy.Source,
+		sidedSources,
+		BehaviorModel.serverMigrationSource(typeId),
+		BehaviorModel.defaultSource(typeId, "Client")
+	)
+
+	-- Preserve the winning legacy source before it becomes the authoritative Edit template.
 	preserveBehaviorBackup(typeId, legacy)
 
-	local edit = Registry.canonicalizeBehaviorTemplate(typeId, "Edit")
-	if edit then
-		legacy:Destroy()
-	else
-		legacy.Name = BehaviorModel.name(typeId, "Edit")
-		legacy:SetAttribute("_FraguaSharedBehavior", true)
-		legacy:SetAttribute("_FraguaBehaviorSide", "Edit")
+	for _, side in BehaviorModel.SIDES do
+		local existing = sidedTemplates[side]
+		if existing then
+			if table.find(migration.backup, side) then
+				moveToBehaviorBackups(typeId, existing)
+			else
+				existing:Destroy()
+			end
+		end
 	end
 
-	if not Registry.canonicalizeBehaviorTemplate(typeId, "Server") then
-		createBehaviorTemplate(typeId, "Server", BehaviorModel.serverMigrationSource(typeId))
-	end
-	if not Registry.canonicalizeBehaviorTemplate(typeId, "Client") then
-		createBehaviorTemplate(typeId, "Client", BehaviorModel.defaultSource(typeId, "Client"))
-	end
+	legacy.Name = BehaviorModel.name(typeId, "Edit")
+	legacy:SetAttribute("_FraguaSharedBehavior", true)
+	legacy:SetAttribute("_FraguaBehaviorSide", "Edit")
+	createBehaviorTemplate(typeId, "Server", migration.sources.Server)
+	createBehaviorTemplate(typeId, "Client", migration.sources.Client)
 end
 
 function Registry.ensureBehaviorTemplate(typeId: string, side: string): ModuleScript
@@ -796,14 +839,28 @@ function Registry.setBehaviorSource(typeId: string, side: string, source: string
 	end
 end
 
+local function registeredTypeIds(): { string }
+	local typeIds = {}
+	for _, def in Registry.list() do
+		table.insert(typeIds, def.id)
+	end
+	return typeIds
+end
+
 local function behaviorTemplateIdentity(template: ModuleScript): (string?, string?)
-	for _, side in BehaviorModel.SIDES do
-		local suffix = side .. "Behavior"
-		if string.sub(template.Name, -#suffix) == suffix then
-			return string.sub(template.Name, 1, #template.Name - #suffix), side
+	return BehaviorModel.templateIdentity(template.Name, registeredTypeIds(), decodeTypeModule(template) ~= nil)
+end
+
+local function legacyBehaviorTypeId(template: ModuleScript): string?
+	if decodeTypeModule(template) then
+		return nil
+	end
+	for _, typeId in registeredTypeIds() do
+		if template.Name == typeId .. "Behavior" then
+			return typeId
 		end
 	end
-	return nil, nil
+	return nil
 end
 
 function Registry.watchBehaviorTemplates()
@@ -869,7 +926,7 @@ function Registry.watchBehaviorTemplates()
 					watch(child)
 					return
 				end
-				local legacyTypeId = string.match(child.Name, "^(.*)Behavior$")
+				local legacyTypeId = legacyBehaviorTypeId(child)
 				if legacyTypeId then
 					migrateLegacyBehavior(legacyTypeId)
 					for _, migratedSide in BehaviorModel.SIDES do

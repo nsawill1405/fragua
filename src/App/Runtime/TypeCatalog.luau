@@ -68,13 +68,6 @@ function TypeCatalog.sync(registry)
 		if oldBehavior then
 			oldBehavior:Destroy()
 		end
-		local template = registry.getSharedBehavior(entry.id)
-		if template then
-			local behavior = template:Clone()
-			behavior.Name = "Behavior"
-			behavior:SetAttribute("_FraguaManaged", true)
-			behavior.Parent = typeEntry
-		end
 	end
 
 	for _, child in root:GetChildren() do

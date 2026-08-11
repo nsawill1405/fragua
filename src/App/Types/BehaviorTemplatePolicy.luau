@@ -54,4 +54,34 @@ function BehaviorTemplatePolicy.backupName(existing: { [string]: any }, typeId: 
 	return candidate
 end
 
+function BehaviorTemplatePolicy.legacyMigrationPlan(
+	legacySource: string,
+	existingSources: { [string]: string },
+	serverSource: string,
+	clientSource: string
+)
+	local sources = {
+		Edit = legacySource,
+		Server = serverSource,
+		Client = clientSource,
+	}
+	local backup = {}
+	local discard = {}
+	for _, side in { "Edit", "Server", "Client" } do
+		local existing = existingSources[side]
+		if existing ~= nil then
+			if existing == sources[side] then
+				table.insert(discard, side)
+			else
+				table.insert(backup, side)
+			end
+		end
+	end
+	return {
+		sources = sources,
+		backup = backup,
+		discard = discard,
+	}
+end
+
 return BehaviorTemplatePolicy
