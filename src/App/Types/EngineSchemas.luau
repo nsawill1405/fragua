@@ -13,48 +13,14 @@ local function props(list: { PropDef }): { PropDef }
 	return list
 end
 
+local EngineClassSchemas = require(script.Parent.EngineClassSchemas)
+
 local INSTANCE_PROPS = props({
 	{ name = "Name", valueType = "string", default = "Instance", category = "Data" },
 	{ name = "Archivable", valueType = "boolean", default = true, category = "Data" },
 })
 
-local MATERIALS = {
-	"Plastic",
-	"Wood",
-	"Slate",
-	"Concrete",
-	"CorrodedMetal",
-	"DiamondPlate",
-	"Foil",
-	"Grass",
-	"Ice",
-	"Marble",
-	"Granite",
-	"Brick",
-	"Pebble",
-	"Sand",
-	"Fabric",
-	"SmoothPlastic",
-	"Metal",
-	"WoodPlanks",
-	"Glass",
-	"ForceField",
-	"Neon",
-	"Cobblestone",
-	"Asphalt",
-	"Rock",
-	"Glacier",
-	"Snow",
-	"Sandstone",
-	"Mud",
-	"Basalt",
-	"Ground",
-	"CrackedLava",
-	"LeafyGrass",
-	"Salt",
-	"Limestone",
-	"Pavement",
-}
+local MATERIALS = EngineClassSchemas.materials()
 
 local SCHEMAS: { [string]: { PropDef } } = {
 	Instance = INSTANCE_PROPS,
@@ -298,7 +264,24 @@ local INSERT_SECTIONS: { InsertSection } = {
 local EngineSchemas = {}
 
 function EngineSchemas.get(className: string): { PropDef }
-	return SCHEMAS[className] or INSTANCE_PROPS
+	local rows = {}
+	local indexes = {}
+	local function merge(layer)
+		for _, property in layer do
+			local copy = table.clone(property)
+			local existing = indexes[property.name]
+			if existing then
+				rows[existing] = copy
+			else
+				table.insert(rows, copy)
+				indexes[property.name] = #rows
+			end
+		end
+	end
+	merge(INSTANCE_PROPS)
+	merge(EngineClassSchemas.forClass(className))
+	merge(SCHEMAS[className] or {})
+	return rows
 end
 
 function EngineSchemas.insertable(): { string }
@@ -320,7 +303,7 @@ function EngineSchemas.insertSections(): { InsertSection }
 end
 
 function EngineSchemas.has(className: string): boolean
-	return SCHEMAS[className] ~= nil
+	return SCHEMAS[className] ~= nil or EngineClassSchemas.has(className)
 end
 
 function EngineSchemas.baseClasses(): { string }

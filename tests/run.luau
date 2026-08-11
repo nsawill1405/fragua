@@ -12,6 +12,8 @@ TestRunner.run({
 	InsertFlow = require("./InsertFlow.spec"),
 	IconData = require("./IconData.spec"),
 	EnginePropResolver = require("./EnginePropResolver.spec"),
+	EngineClassSchemas = require("./EngineClassSchemas.spec"),
+	PropertiesCategoryOrder = require("./PropertiesCategoryOrder.spec"),
 	LifecycleGate = require("./LifecycleGate.spec"),
 	MetadataModel = require("./MetadataModel.spec"),
 	BehaviorTemplatePolicy = require("./BehaviorTemplatePolicy.spec"),

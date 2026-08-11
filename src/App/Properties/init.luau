@@ -11,44 +11,9 @@ local EngineProps = require(script.EngineProps)
 local Controls = require(script.Controls)
 local MetadataEditor = require(script.MetadataEditor)
 local PropertyRefreshPolicy = require(script.PropertyRefreshPolicy)
+local CategoryOrder = require(script.CategoryOrder)
 
 local Properties = {}
-
-local CATEGORY_ORDER = {
-	"Data",
-	"Behavior",
-	"Appearance",
-	"Transform",
-	"Part",
-	"Health",
-	"Control",
-	"Display",
-	"Text",
-	"Audio",
-	"Camera",
-	"World",
-	"Streaming",
-	"Celestial",
-	"Fog",
-	"Tags",
-	"Attributes",
-}
-
-local function sortCategories(cats: { string }): { string }
-	local rank: { [string]: number } = {}
-	for i, name in CATEGORY_ORDER do
-		rank[name] = i
-	end
-	table.sort(cats, function(a, b)
-		local ra = rank[a] or 500
-		local rb = rank[b] or 500
-		if ra == rb then
-			return a < b
-		end
-		return ra < rb
-	end)
-	return cats
-end
 
 function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((any) -> ())? }?)
 	opts = opts or {}
@@ -429,6 +394,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			local byCategory: { [string]: { any } } = {}
 			local categories: { string } = {}
 			local schemaNames: { [string]: boolean } = {}
+			local directCategories: { string } = {}
 			local isFragua = Registry.isFraguaInstance(current)
 
 			local function push(cat: string, row: any)
@@ -473,6 +439,14 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				})
 
 				if def then
+					local seenDirectCategories = {}
+					for _, property in def.properties do
+						local category = property.category or "Data"
+						if not seenDirectCategories[category] then
+							seenDirectCategories[category] = true
+							table.insert(directCategories, category)
+						end
+					end
 					for _, prop in Registry.resolvedSchema(def) do
 						if prop.name ~= "Name" and prop.name ~= "Archivable" then
 							schemaNames[prop.name] = true
@@ -576,6 +550,8 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 						valueType = "Color3"
 					elseif typeof(value) == "Vector3" then
 						valueType = "Vector3"
+					elseif typeof(value) == "BrickColor" then
+						valueType = "BrickColor"
 					elseif typeof(value) == "boolean" then
 						valueType = "boolean"
 					elseif typeof(value) == "number" then
@@ -619,7 +595,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			})
 
 			local order = 1
-			for _, cat in sortCategories(categories) do
+			for _, cat in CategoryOrder.sort(categories, directCategories) do
 				local catName = cat
 				addSection(catName, order, function()
 					collapsedSections[catName] = not collapsedSections[catName]
