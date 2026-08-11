@@ -73,16 +73,21 @@ local function positionFrom(request, source: string): number
 	return math.clamp(offset + character - 1, 0, #source)
 end
 
-local function lineContext(source: string, position: number)
-	local beforeCursor = source:sub(1, position)
-	local currentLineStart = beforeCursor:match(".*()\n") or 0
-	local currentLine = beforeCursor:sub(currentLineStart + 1)
+local function extractContext(source: string, position: number): { string }
 	local lines = {}
-	for line in (beforeCursor .. "\n"):gmatch("(.-)\n") do
-		table.insert(lines, line)
+	local lineEnd = position
+	for _ = 1, 201 do
+		local newline = lineEnd
+		while newline > 0 and string.byte(source, newline) ~= 10 do
+			newline -= 1
+		end
+		table.insert(lines, 1, source:sub(newline + 1, lineEnd))
+		if newline == 0 then
+			break
+		end
+		lineEnd = newline - 1
 	end
-	local currentLineNumber = #lines
-	return beforeCursor, currentLine, lines, currentLineNumber
+	return lines
 end
 
 local function typesById(surface)
@@ -95,18 +100,15 @@ local function typesById(surface)
 	return result
 end
 
-local function inferLocals(source: string, position: number, surface)
-	local _, _, lines, currentLineNumber = lineContext(source, position)
-	local cacheKey = hash(source) .. ":" .. revision(surface) .. ":" .. tostring(currentLineNumber)
+local function inferLocals(source: string, position: number, surface, lines)
+	local cacheKey = hash(source) .. ":" .. revision(surface) .. ":" .. tostring(position)
 	if inferenceCache[cacheKey] then
 		return inferenceCache[cacheKey]
 	end
 
 	local knownTypes = typesById(surface)
 	local locals = {}
-	local firstLine = math.max(1, currentLineNumber - 200)
-	for lineNumber = firstLine, currentLineNumber do
-		local line = lines[lineNumber]
+	for _, line in lines do
 		local name, typeId = line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Instance%.new%s*%(%s*[\"']([^\"']+)[\"']%s*%)")
 		if not typeId then
 			name, typeId =
@@ -241,7 +243,8 @@ function AutocompleteModel.complete(request, surface, facade)
 	end
 	local source = sourceFrom(request)
 	local position = positionFrom(request, source)
-	local _, currentLine = lineContext(source, position)
+	local lines = extractContext(source, position)
+	local currentLine = lines[#lines] or ""
 
 	local partial = currentLine:match("Instance%.new%s*%(%s*[\"']([^\"']*)$")
 	if partial then
@@ -260,13 +263,18 @@ function AutocompleteModel.complete(request, surface, facade)
 	if not localName then
 		return {}
 	end
-	local localTypes = inferLocals(source, position, surface)
+	local localTypes = inferLocals(source, position, surface, lines)
 	local typeId = localTypes[localName]
 	local typeEntry = typesById(surface)[typeId]
 	if not typeEntry then
 		return {}
 	end
 	return memberItems(typeEntry, facade or "Core", memberPartial, position)
+end
+
+function AutocompleteModel.extractContext(request): { string }
+	local source = sourceFrom(request)
+	return extractContext(source, positionFrom(request, source))
 end
 
 return AutocompleteModel
