@@ -43,6 +43,7 @@ function Util.attributeTypeName(value: any): string
 		or t == "Vector2"
 		or t == "UDim2"
 		or t == "CFrame"
+		or t == "BrickColor"
 	then
 		return t
 	end
@@ -85,6 +86,9 @@ function Util.parseValue(valueType: string, text: string): (boolean, any)
 			return false, nil
 		end
 		return true, Vector3.new(tonumber(x), tonumber(y), tonumber(z))
+	elseif valueType == "BrickColor" then
+		local ok, value = pcall(BrickColor.new, text)
+		return ok, if ok then value else nil
 	end
 	return true, text
 end
@@ -102,6 +106,8 @@ function Util.formatValue(value: any): string
 		return string.format("%.3g, %.3g, %.3g", value.X, value.Y, value.Z)
 	elseif t == "boolean" then
 		return if value then "true" else "false"
+	elseif t == "BrickColor" then
+		return value.Name
 	end
 	return tostring(value)
 end

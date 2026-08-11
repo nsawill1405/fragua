@@ -12,6 +12,7 @@ export type EngineProp = {
 local EngineProps = {}
 
 local MATERIALS = require(script.Parent.Parent.Types.EngineSchemas).materials()
+local EngineClassSchemas = require(script.Parent.Parent.Types.EngineClassSchemas)
 local EnginePropResolver = require(script.Parent.EnginePropResolver)
 
 local BASE_PART_PROPS = {
@@ -492,6 +493,16 @@ function EngineProps.forInstance(instance: Instance): { EngineProp }
 
 	local out = {}
 	local seen: { [string]: boolean } = {}
+	for _, prop in list do
+		seen[prop.name] = true
+	end
+	for _, prop in EngineClassSchemas.forClass(instance.ClassName) do
+		if not seen[prop.name] then
+			table.insert(list, prop)
+			seen[prop.name] = true
+		end
+	end
+	table.clear(seen)
 	for _, prop in list do
 		local ok = pcall(function()
 			local _ = (instance :: any)[prop.name]
