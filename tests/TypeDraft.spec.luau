@@ -144,4 +144,28 @@ return {
 		assert(snapshot[1].id == propertyId and snapshot[1].categoryName == "Stats")
 		assert(snapshot[1].defaultText == "150")
 	end,
+	["value type replacement preserves category order and uses its typed default"] = function()
+		local Roblox = require("@lune/roblox")
+		local draft = TypeDraft.new("Zombie")
+		local dataId = TypeDraft.addCategory(draft, "Data")
+		local aiId = TypeDraft.addCategory(draft, "AI")
+		local propertyId = TypeDraft.addProperty(draft, aiId, "Spawn", "Vector3", Roblox.Vector3.zero)
+		local order = TypeDraft.snapshotCategoryOrder(draft)
+		TypeDraft.updateProperty(draft, propertyId, {
+			valueType = "CFrame",
+			defaultValue = Roblox.CFrame.identity,
+		})
+		local after = TypeDraft.snapshotCategoryOrder(draft)
+		assert(#after == #order and after[1] == dataId and after[2] == aiId)
+		assert(draft.properties[propertyId].defaultValue == Roblox.CFrame.identity)
+		assert(draft.properties[propertyId].defaultInputError == nil)
+	end,
+	["category order snapshots cannot mutate the draft"] = function()
+		local draft = TypeDraft.new("Zombie")
+		local first = TypeDraft.addCategory(draft, "First")
+		TypeDraft.addCategory(draft, "Second")
+		local order = TypeDraft.snapshotCategoryOrder(draft)
+		order[1] = "changed"
+		assert(draft.categoryOrder[1] == first)
+	end,
 }
