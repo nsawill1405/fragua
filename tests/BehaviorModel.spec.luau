@@ -54,4 +54,14 @@ return {
 		assert(not source:find("Behavior.onPropertyChanged", 1, true))
 		assert(not source:find("Behavior.onAncestryChanged", 1, true))
 	end,
+	["type definitions and exact behavior identities cannot collide"] = function()
+		local model = requireModel()
+		local typeIds = { "Foo", "FooEditBehavior" }
+		local definitionType, definitionSide = model.templateIdentity("FooEditBehavior", typeIds, true)
+		assert(definitionType == nil and definitionSide == nil)
+		local fooType, fooSide = model.templateIdentity("FooEditBehavior", typeIds, false)
+		assert(fooType == "Foo" and fooSide == "Edit")
+		local namedType, namedSide = model.templateIdentity("FooEditBehaviorEditBehavior", typeIds, false)
+		assert(namedType == "FooEditBehavior" and namedSide == "Edit")
+	end,
 }

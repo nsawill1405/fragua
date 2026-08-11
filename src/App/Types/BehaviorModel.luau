@@ -23,6 +23,24 @@ function BehaviorModel.name(typeId: string, side: string): string
 	return typeId .. SUFFIX[side]
 end
 
+function BehaviorModel.templateIdentity(
+	name: string,
+	typeIds: { string },
+	isTypeDefinition: boolean
+): (string?, string?)
+	if isTypeDefinition then
+		return nil, nil
+	end
+	for _, typeId in typeIds do
+		for _, side in BehaviorModel.SIDES do
+			if name == BehaviorModel.name(typeId, side) then
+				return typeId, side
+			end
+		end
+	end
+	return nil, nil
+end
+
 function BehaviorModel.defaultSource(typeId: string, side: string): string
 	requireSide(side)
 	local lines = {
