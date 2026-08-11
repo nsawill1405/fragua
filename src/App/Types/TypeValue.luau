@@ -104,10 +104,10 @@ function TypeValue.validate(valueType: string, value: any, metadata: table?): (b
 		end
 		return true
 	elseif valueType == "Instance" or valueType == "FraguaInstance" then
-		if value == nil or typeof(value) == "Instance" then
+		if value == nil then
 			return true
 		end
-		return false, "Expected an Instance reference."
+		return false, "Object reference defaults are not supported."
 	end
 
 	if typeof(value) ~= valueType then
@@ -118,7 +118,9 @@ end
 
 function TypeValue.serialize(value: any): any
 	local valueType = typeof(value)
-	if valueType == "Color3" then
+	if valueType == "Instance" then
+		return nil
+	elseif valueType == "Color3" then
 		return { __typeof = "Color3", R = value.R, G = value.G, B = value.B }
 	elseif valueType == "BrickColor" then
 		return { __typeof = "BrickColor", Name = value.Name }
