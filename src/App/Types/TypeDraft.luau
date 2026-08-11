@@ -1,7 +1,18 @@
 local Util = if script then require(script.Parent.Parent.Shared.Util) else require("../Shared/Util")
 local TypeValue = if script then require(script.Parent.TypeValue) else require("./TypeValue")
+local EngineSchemas = if script then require(script.Parent.EngineSchemas) else nil
 
 local TypeDraft = {}
+
+local CORE_RESERVED_PROPERTIES = {
+	Name = true,
+	Archivable = true,
+	_FraguaType = true,
+	_FraguaManaged = true,
+	_FraguaInstanceBehavior = true,
+	_FraguaSharedBehavior = true,
+	_FraguaBehaviorBackups = true,
+}
 
 local function nextId(draft, kind: string): string
 	draft.nextId += 1
@@ -106,6 +117,7 @@ function TypeDraft.updateProperty(draft, propertyId: string, changes)
 		end
 	elseif changes.defaultValue ~= nil then
 		property.defaultInputError = nil
+		property.defaultText = Util.formatValue(property.defaultValue)
 	end
 end
 
@@ -127,9 +139,40 @@ function TypeDraft.snapshotEditableProperties(draft)
 	return snapshot
 end
 
+local function reservedPropertyNames(draft, lookupType)
+	local reserved = table.clone(CORE_RESERVED_PROPERTIES)
+	local visited = {}
+	local currentId = draft.extends
+
+	while currentId and currentId ~= "" do
+		if visited[currentId] then
+			break
+		end
+		visited[currentId] = true
+
+		local definition = lookupType(currentId)
+		if definition then
+			for _, property in definition.properties or {} do
+				reserved[property.name] = true
+			end
+			currentId = definition.extends
+		elseif EngineSchemas then
+			for _, property in EngineSchemas.get(currentId) do
+				reserved[property.name] = true
+			end
+			break
+		else
+			break
+		end
+	end
+
+	return reserved
+end
+
 function TypeDraft.validate(draft, lookupType)
 	local errors = {}
 	local seenNames = {}
+	local reservedNames = reservedPropertyNames(draft, lookupType)
 
 	for _, propertyId in draft.propertyOrder do
 		local property = draft.properties[propertyId]
@@ -139,6 +182,12 @@ function TypeDraft.validate(draft, lookupType)
 					fieldId = propertyId,
 					code = "invalid-property-name",
 					message = `"{property.name}" is not a valid property identifier.`,
+				})
+			elseif reservedNames[property.name] then
+				table.insert(errors, {
+					fieldId = propertyId,
+					code = "reserved-property",
+					message = `Property "{property.name}" conflicts with an inherited or reserved property.`,
 				})
 			elseif seenNames[property.name] then
 				table.insert(errors, {

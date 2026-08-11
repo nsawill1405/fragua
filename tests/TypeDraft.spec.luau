@@ -8,6 +8,38 @@ return {
 		TypeDraft.updateProperty(draft, propertyId, { defaultValue = true })
 		assert(TypeDraft.snapshotEditableProperties(draft)[1].defaultValue == true)
 	end,
+	["synchronizes compatibility text after typed default changes"] = function()
+		local draft = TypeDraft.new("Zombie")
+		local categoryId = TypeDraft.addCategory(draft, "Data")
+		local propertyId = TypeDraft.addProperty(draft, categoryId, "Enabled", "boolean", false)
+		TypeDraft.updateProperty(draft, propertyId, { defaultValue = true })
+		assert(draft.properties[propertyId].defaultText == "true")
+	end,
+	["rejects core and inherited property name collisions"] = function()
+		local draft = TypeDraft.new("Child", "Base")
+		local categoryId = TypeDraft.addCategory(draft, "Data")
+		local nameId = TypeDraft.addProperty(draft, categoryId, "Name", "string", "Child")
+		local archivableId = TypeDraft.addProperty(draft, categoryId, "Archivable", "boolean", true)
+		local coreId = TypeDraft.addProperty(draft, categoryId, "_FraguaType", "string", "Child")
+		local inheritedId = TypeDraft.addProperty(draft, categoryId, "Health", "number", 100)
+		local errors = TypeDraft.validate(draft, function(typeId)
+			if typeId == "Base" then
+				return {
+					id = "Base",
+					extends = "Configuration",
+					properties = { { name = "Health" } },
+				}
+			end
+			return nil
+		end)
+		local collided = {}
+		for _, error in errors do
+			if error.code == "reserved-property" then
+				collided[error.fieldId] = true
+			end
+		end
+		assert(collided[nameId] and collided[archivableId] and collided[coreId] and collided[inheritedId])
+	end,
 	["keeps property category identity stable across rename"] = function()
 		local draft = TypeDraft.new("Zombie")
 		local categoryId = TypeDraft.addCategory(draft, "AI")
