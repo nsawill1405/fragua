@@ -87,4 +87,37 @@ return {
 		local tostringBacking = assert(source:find("tostring(state.backing)", tostringStart, true))
 		assert(usable < tostringBacking)
 	end,
+	["Clone preserves remapped references while fromExisting copies source references"] = function()
+		local source = buildSource()
+		local cloneStart = assert(source:find('elseif key == "Clone" then', 1, true))
+		local cloneEnd = assert(source:find('elseif key == "IsA" then', cloneStart, true))
+		local cloneBlock = source:sub(cloneStart, cloneEnd - 1)
+		assert(cloneBlock:find("copyCustomValues(state.backing, clone, definition, true)", 1, true))
+
+		local existingStart = assert(source:find("function FraguaInstance.fromExisting", 1, true))
+		local existingEnd = assert(source:find("setmetatable(FraguaInstance", existingStart, true))
+		local existingBlock = source:sub(existingStart, existingEnd - 1)
+		assert(existingBlock:find("copyCustomValues(backing, duplicate, definition, false)", 1, true))
+	end,
+	["known non-creatable native strings rethrow before custom lookup"] = function()
+		local source = buildSource()
+		local stringOnly = assert(source:find("if not forceCustom then", 1, true))
+		local nativeCall = assert(source:find("RobloxInstance.new(className)", stringOnly, true))
+		local collision = assert(source:find("if isKnownNativeClass(className) then", nativeCall, true))
+		local nativeError = assert(source:find("error(nativeProblem, 2)", collision, true))
+		local customLookup = assert(source:find("local definition = findDefinition(className)", nativeError, true))
+		assert(
+			stringOnly < nativeCall
+				and nativeCall < collision
+				and collision < nativeError
+				and nativeError < customLookup
+		)
+	end,
+	["Fragua enum items bypass native class collision routing"] = function()
+		local source = buildSource()
+		local enumItem = assert(source:find("forceCustom = true", 1, true))
+		local stringOnly = assert(source:find("if not forceCustom then", enumItem, true))
+		local customLookup = assert(source:find("local definition = findDefinition(className)", stringOnly, true))
+		assert(enumItem < stringOnly and stringOnly < customLookup)
+	end,
 }

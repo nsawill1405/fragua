@@ -257,6 +257,27 @@ function EngineSchemas.has(className: string): boolean
 	return EngineClassSchemas.has(className)
 end
 
+function EngineSchemas.classNames(): { string }
+	local known = {}
+	for _, className in EngineClassSchemas.classNames() do
+		known[className] = true
+	end
+	for _, className in BASE_CLASSES do
+		known[className] = true
+	end
+	for _, section in INSERT_SECTIONS do
+		for _, className in section.classes do
+			known[className] = true
+		end
+	end
+	local names = {}
+	for className in known do
+		table.insert(names, className)
+	end
+	table.sort(names)
+	return names
+end
+
 function EngineSchemas.baseClasses(): { string }
 	return table.clone(BASE_CLASSES)
 end

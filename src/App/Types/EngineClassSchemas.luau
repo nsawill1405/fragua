@@ -31,6 +31,10 @@ function EngineClassSchemas.has(className: string): boolean
 	return EnginePropertyCatalog.has(className)
 end
 
+function EngineClassSchemas.classNames(): { string }
+	return EnginePropertyCatalog.classNames()
+end
+
 function EngineClassSchemas.materials(): { string }
 	return EnginePropertyCatalog.materials()
 end

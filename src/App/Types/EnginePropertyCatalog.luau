@@ -804,6 +804,31 @@ function EnginePropertyCatalog.serviceNames(): { string }
 	return names
 end
 
+function EnginePropertyCatalog.classNames(): { string }
+	local known = { Instance = true }
+	for className in SERVICE_NAMES do
+		known[className] = true
+	end
+	for className in BY_CLASS do
+		known[className] = true
+	end
+	for className in SCHEMA_EXACT do
+		known[className] = true
+	end
+	for _, family in INHERITED_FAMILIES do
+		known[family.className] = true
+		for className in family.classes do
+			known[className] = true
+		end
+	end
+	local names = {}
+	for className in known do
+		table.insert(names, className)
+	end
+	table.sort(names)
+	return names
+end
+
 function EnginePropertyCatalog.probeProperties(): { EngineProp }
 	return REFLECT_PROPS
 end
