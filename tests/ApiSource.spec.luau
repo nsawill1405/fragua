@@ -117,12 +117,35 @@ return {
 	["facade casts preserve inferred values for Clone fromExisting and Get"] = function()
 		local source = ApiSource.build(typedSurface())
 		assert(aliasBlock(source, "ZombieServer"):find("Clone: (self: ZombieServer) -> ZombieServer?", 1, true))
-		assert(source:find("type ServerFromExisting = typeof(RobloxInstance.fromExisting)", 1, true))
-		assert(source:find("& (<T>(existing: T & Instance) -> T?)", 1, true))
-		assert(source:find("Get: <T>(value: T & Instance) -> T", 1, true))
+		assert(aliasBlock(source, "ZombieServer"):find('TypeId: "Zombie"', 1, true))
+		assert(source:find("type ServerFromExisting =", 1, true))
+		assert(source:find("& typeof(RobloxInstance.fromExisting)", 1, true))
+		assert(source:find("Get: ServerGet", 1, true))
 		assert(source:find("local Server = ServerRuntime :: typeof(ServerRuntime) & ServerFacade", 1, true))
 		assert(source:find("local Client = ClientRuntime :: typeof(ClientRuntime) & ClientFacade", 1, true))
 		assert(source:find("local Core = CoreRuntime :: typeof(CoreRuntime) & CoreFacade", 1, true))
+	end,
+	["cross-facade helpers return the invoked facade alias"] = function()
+		local source = ApiSource.build(typedSurface())
+		local inputAliases = "ZombieServer | ZombieClient | ZombieCore"
+		local clientGet = assert(source:find("type ClientGet =", 1, true))
+		local clientGetSpecific =
+			assert(source:find("((value: " .. inputAliases .. ") -> ZombieClient)", clientGet, true))
+		local clientGetFallback = assert(source:find("& (<T>(value: T & Instance) -> T)", clientGetSpecific, true))
+		assert(clientGetSpecific < clientGetFallback)
+
+		local clientExisting = assert(source:find("type ClientFromExisting =", 1, true))
+		local clientExistingSpecific =
+			assert(source:find("((existing: " .. inputAliases .. ") -> ZombieClient?)", clientExisting, true))
+		local clientExistingNative =
+			assert(source:find("& typeof(RobloxInstance.fromExisting)", clientExistingSpecific, true))
+		assert(clientExistingSpecific < clientExistingNative)
+
+		assert(source:find("((value: " .. inputAliases .. ") -> ZombieServer)", 1, true))
+		assert(source:find("((value: " .. inputAliases .. ") -> ZombieCore)", 1, true))
+		assert(not source:find("Get: <T>(value: T & Instance) -> T", 1, true))
+		local compiled, chunk = pcall(loadstring, source, "CrossFacadeFragua")
+		assert(compiled and chunk, tostring(chunk))
 	end,
 	["populated generated gateway compiles as Luau"] = function()
 		local source = ApiSource.build(typedSurface())

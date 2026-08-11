@@ -207,7 +207,7 @@ end
 
 local function aliasSource(entry, side: string, names): string
 	local alias = names[entry.id] .. side
-	local methodNames = { Clone = true }
+	local methodNames = { Clone = true, TypeId = true }
 	local methods = {}
 	for _, method in methodsForSide(entry, side) do
 		local field = methodField(method, alias)
@@ -230,6 +230,7 @@ local function aliasSource(entry, side: string, names): string
 	local propertyNames = sortedKeys(propertiesByName)
 	local lines = {
 		string.format("export type %s = %s & {", alias, safeBackingClass(entry.backingClass)),
+		string.format("\tTypeId: %s,", quote(entry.id)),
 	}
 	for _, name in propertyNames do
 		table.insert(lines, propertiesByName[name])
@@ -240,6 +241,11 @@ local function aliasSource(entry, side: string, names): string
 	end
 	table.insert(lines, "}")
 	return table.concat(lines, "\n")
+end
+
+local function sideAliases(entry, names): string
+	local base = names[entry.id]
+	return table.concat({ base .. "Server", base .. "Client", base .. "Core" }, " | ")
 end
 
 local function enumField(typeId: string): string
@@ -259,8 +265,26 @@ local function facadeTypes(side: string, entries, names): string
 			string.format("\t& ((className: FraguaTypeItem<%s>, parent: Instance?) -> %s)", quote(entry.id), alias)
 		)
 	end
-	table.insert(lines, string.format("type %sFromExisting = typeof(RobloxInstance.fromExisting)", side))
-	table.insert(lines, "\t& (<T>(existing: T & Instance) -> T?)")
+	if #entries == 0 then
+		table.insert(lines, string.format("type %sFromExisting = typeof(RobloxInstance.fromExisting)", side))
+		table.insert(lines, string.format("type %sGet = <T>(value: T & Instance) -> T", side))
+	else
+		for index, entry in entries do
+			local targetAlias = names[entry.id] .. side
+			local prefix = if index == 1 then string.format("type %sFromExisting = ", side) else "\t& "
+			table.insert(
+				lines,
+				string.format("%s((existing: %s) -> %s?)", prefix, sideAliases(entry, names), targetAlias)
+			)
+		end
+		table.insert(lines, "\t& typeof(RobloxInstance.fromExisting)")
+		for index, entry in entries do
+			local targetAlias = names[entry.id] .. side
+			local prefix = if index == 1 then string.format("type %sGet = ", side) else "\t& "
+			table.insert(lines, string.format("%s((value: %s) -> %s)", prefix, sideAliases(entry, names), targetAlias))
+		end
+		table.insert(lines, "\t& (<T>(value: T & Instance) -> T)")
+	end
 	table.insert(lines, string.format("type %sInstance = typeof(RobloxInstance) & {", side))
 	table.insert(lines, string.format("\tnew: %sNew,", side))
 	table.insert(lines, string.format("\tfromExisting: %sFromExisting,", side))
@@ -268,7 +292,7 @@ local function facadeTypes(side: string, entries, names): string
 	table.insert(lines, string.format("type %sFacade = {", side))
 	table.insert(lines, string.format("\tInstance: %sInstance,", side))
 	table.insert(lines, "\tEnum: FraguaEnum,")
-	table.insert(lines, "\tGet: <T>(value: T & Instance) -> T,")
+	table.insert(lines, string.format("\tGet: %sGet,", side))
 	table.insert(lines, "}")
 	return table.concat(lines, "\n")
 end
