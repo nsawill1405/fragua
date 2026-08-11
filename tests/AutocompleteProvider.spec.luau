@@ -21,6 +21,47 @@ return {
 		assert(received[3] == 1001 and received[4] == 11)
 		assert(prepared.position.line == 201 and prepared.position.character == 11)
 	end,
+	["resolves documented script-only requests to a bounded open document range"] = function()
+		assert(ok and ProviderModel, "AutocompleteProviderModel should be available")
+		local scriptInstance = {}
+		local received = nil
+		local document = {
+			GetText = function(_, ...)
+				received = { ... }
+				return 'local zombie = Instance.new("Zombie")\nzombie:'
+			end,
+		}
+		local request = {
+			position = { line = 451, character = 8 },
+			textDocument = { script = scriptInstance },
+		}
+		local prepared = ProviderModel.prepareRequest(request, function(scriptToResolve)
+			assert(scriptToResolve == scriptInstance)
+			return document
+		end)
+		assert(received[1] == 251 and received[2] == 1)
+		assert(received[3] == 451 and received[4] == 8)
+		assert(prepared.position.line == 201 and prepared.position.character == 8)
+	end,
+	["contains script document lookup failures and preserves native results"] = function()
+		assert(ok and ProviderModel, "AutocompleteProviderModel should be available")
+		local attempted = false
+		local native = { label = "Wait", kind = "Method" }
+		local response = { items = { native } }
+		local request = {
+			position = { line = 4, character = 8 },
+			textDocument = { script = {} },
+		}
+		ProviderModel.applyAdditions(response, function(callbackRequest)
+			ProviderModel.prepareRequest(callbackRequest, function()
+				attempted = true
+				error("document lookup failed")
+			end)
+			return {}
+		end, request)
+		assert(attempted)
+		assert(#response.items == 1 and response.items[1] == native)
+	end,
 	["deduplicates additions without changing native item order"] = function()
 		assert(ok and ProviderModel, "AutocompleteProviderModel should be available")
 		local first = { label = "Health", kind = "Property" }

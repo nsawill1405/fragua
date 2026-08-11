@@ -90,6 +90,10 @@ local function isFacade(value): boolean
 	return value == "Server" or value == "Client" or value == "Core"
 end
 
+local function isFacadeRoot(value): boolean
+	return value == "Fragua" or value == "FraguaGateway"
+end
+
 local function inferLocals(surface, lines)
 	local surfaceRevision = revision(surface)
 	local contextLines = {}
@@ -104,18 +108,18 @@ local function inferLocals(surface, lines)
 	local knownTypes = typesById(surface)
 	local locals = {}
 	for _, line in contextLines do
-		local name, explicitFacade, typeId = line:match(
-			"^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.([%a_][%w_]*)%.Instance%.new%s*%(%s*[\"']([^\"']+)[\"']%s*%)"
+		local name, facadeRoot, explicitFacade, typeId = line:match(
+			"^%s*local%s+([%a_][%w_]*)%s*=%s*([%a_][%w_]*)%.([%a_][%w_]*)%.Instance%.new%s*%(%s*[\"']([^\"']+)[\"']%s*%)"
 		)
-		if not (name and isFacade(explicitFacade)) then
+		if not (name and isFacadeRoot(facadeRoot) and isFacade(explicitFacade)) then
 			name, typeId = line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Instance%.new%s*%(%s*[\"']([^\"']+)[\"']%s*%)")
 			explicitFacade = nil
 		end
 		if not typeId then
-			name, explicitFacade, typeId = line:match(
-				"^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.([%a_][%w_]*)%.Instance%.new%s*%(%s*Enum%.FraguaType%.([%a_][%w_]*)%s*%)"
+			name, facadeRoot, explicitFacade, typeId = line:match(
+				"^%s*local%s+([%a_][%w_]*)%s*=%s*([%a_][%w_]*)%.([%a_][%w_]*)%.Instance%.new%s*%(%s*Enum%.FraguaType%.([%a_][%w_]*)%s*%)"
 			)
-			if not (name and isFacade(explicitFacade)) then
+			if not (name and isFacadeRoot(facadeRoot) and isFacade(explicitFacade)) then
 				name, typeId = line:match(
 					"^%s*local%s+([%a_][%w_]*)%s*=%s*Instance%.new%s*%(%s*Enum%.FraguaType%.([%a_][%w_]*)%s*%)"
 				)
@@ -125,9 +129,10 @@ local function inferLocals(surface, lines)
 		if name and knownTypes[typeId] then
 			locals[name] = { typeId = typeId, facade = explicitFacade }
 		else
-			local assigned, getFacade, sourceName =
-				line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.([%a_][%w_]*)%.Get%s*%(%s*([%a_][%w_]*)%s*%)")
-			if not (assigned and isFacade(getFacade)) then
+			local assigned, getRoot, getFacade, sourceName = line:match(
+				"^%s*local%s+([%a_][%w_]*)%s*=%s*([%a_][%w_]*)%.([%a_][%w_]*)%.Get%s*%(%s*([%a_][%w_]*)%s*%)"
+			)
+			if not (assigned and isFacadeRoot(getRoot) and isFacade(getFacade)) then
 				assigned, sourceName =
 					line:match("^%s*local%s+([%a_][%w_]*)%s*=%s*Fragua%.Get%s*%(%s*([%a_][%w_]*)%s*%)")
 				getFacade = nil

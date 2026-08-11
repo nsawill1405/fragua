@@ -4,10 +4,14 @@ local AutocompleteProviderModel = {}
 
 local MAX_PRECEDING_LINES = 200
 
-function AutocompleteProviderModel.prepareRequest(request)
+function AutocompleteProviderModel.prepareRequest(request, findScriptDocument)
 	local modelRequest = table.clone(request)
 	local position = request.position
-	local document = request.textDocument and request.textDocument.document
+	local textDocument = request.textDocument
+	local document = textDocument and textDocument.document
+	if not document and textDocument and textDocument.script and findScriptDocument then
+		document = findScriptDocument(textDocument.script)
+	end
 	if
 		document
 		and typeof(position) == "table"

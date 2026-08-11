@@ -179,4 +179,25 @@ return {
 		assert(not find(items, "PlayClientEffect"))
 		assert(find(items, "Destroy"))
 	end,
+	["managed gateway constructors select their explicit facade"] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local source = 'local zombie = FraguaGateway.Client.Instance.new("Zombie")\nzombie:'
+		local items = Model.complete({ line = source, position = #source }, surface(), "Server")
+		assert(find(items, "PlayClientEffect"))
+		assert(not find(items, "Attack"))
+	end,
+	["wrapped value aliases retain managed gateway constructor facades"] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local source = 'local zombie = FraguaGateway.Client.Instance.new("Zombie")\nlocal copy = zombie\ncopy:'
+		local items = Model.complete({ line = source, position = #source }, surface(), "Server")
+		assert(find(items, "PlayClientEffect"))
+		assert(not find(items, "Attack"))
+	end,
+	["managed gateway Get calls select their invoked facade"] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local source = 'local raw = Instance.new("Zombie")\nlocal zombie = FraguaGateway.Client.Get(raw)\nzombie:'
+		local items = Model.complete({ line = source, position = #source }, surface(), "Server")
+		assert(find(items, "PlayClientEffect"))
+		assert(not find(items, "Attack"))
+	end,
 }

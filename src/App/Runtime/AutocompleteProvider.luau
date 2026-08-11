@@ -36,7 +36,9 @@ end
 function AutocompleteProvider.start(getSurface)
 	local ScriptEditorService = game:GetService("ScriptEditorService")
 	local function buildAdditions(request)
-		local modelRequest = AutocompleteProviderModel.prepareRequest(request)
+		local modelRequest = AutocompleteProviderModel.prepareRequest(request, function(scriptInstance)
+			return ScriptEditorService:FindScriptDocument(scriptInstance)
+		end)
 		local surface = getSurface()
 		local additions = AutocompleteModel.complete(modelRequest, surface, facadeFor(request))
 		local editorItems = {}
