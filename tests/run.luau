@@ -30,4 +30,5 @@ TestRunner.run({
 	BehaviorSignatures = require("./BehaviorSignatures.spec"),
 	TypeSurface = require("./TypeSurface.spec"),
 	ApiSource = require("./ApiSource.spec"),
+	AutocompleteModel = require("./AutocompleteModel.spec"),
 })
