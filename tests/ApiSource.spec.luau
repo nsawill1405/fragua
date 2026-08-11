@@ -1,8 +1,61 @@
 local ApiSource = require("../src/App/Runtime/ApiSource")
+local fs = require("@lune/fs")
 
 local function buildSource()
 	assert(typeof(ApiSource) == "table" and ApiSource.build, "ApiSource should expose build(surface?)")
 	return ApiSource.build({ types = {} })
+end
+
+local function typedSurface()
+	return {
+		types = {
+			{
+				id = "Enemy",
+				backingClass = "Part",
+				properties = {
+					{ name = "Threat", typeName = "number" },
+				},
+				serverMethods = {},
+				clientMethods = {},
+			},
+			{
+				id = "Zombie",
+				backingClass = "Part",
+				properties = {
+					{ name = "Health", typeName = "number" },
+					{ name = "Leader", typeName = "Enemy", valueType = "FraguaInstance", referenceType = "Enemy" },
+					{ name = "Target", typeName = "Instance", valueType = "Instance" },
+				},
+				serverMethods = {
+					{
+						name = "Attack",
+						parameters = {
+							{ name = "target", typeName = "Instance" },
+							{ name = "damage", typeName = "number" },
+						},
+						returns = "boolean",
+					},
+				},
+				clientMethods = {
+					{
+						name = "PlayEffect",
+						parameters = { { name = "color", typeName = "Color3" } },
+						returns = "()",
+					},
+				},
+			},
+		},
+	}
+end
+
+local function aliasBlock(source: string, alias: string): string
+	local startAt = assert(source:find("export type " .. alias .. " =", 1, true), `missing {alias}`)
+	local nextAlias = source:find("\nexport type ", startAt + 1, true)
+	local nextSection = source:find("\ntype FraguaTypeEnum", startAt + 1, true)
+	local nextAt = if nextAlias and nextSection
+		then math.min(nextAlias, nextSection)
+		else nextAlias or nextSection or #source + 1
+	return source:sub(startAt, nextAt - 1)
 end
 
 return {
@@ -36,6 +89,104 @@ return {
 		local source = buildSource()
 		local compiled, chunk = pcall(loadstring, source, "Fragua")
 		assert(compiled and chunk, tostring(chunk))
+	end,
+	["generated aliases expose properties and only the selected side methods"] = function()
+		local source = ApiSource.build(typedSurface())
+		local server = aliasBlock(source, "ZombieServer")
+		local client = aliasBlock(source, "ZombieClient")
+		local core = aliasBlock(source, "ZombieCore")
+		assert(server:find("Health: number", 1, true))
+		assert(server:find("Leader: EnemyServer?", 1, true))
+		assert(server:find("Target: Instance?", 1, true))
+		assert(server:find("Attack: (self: ZombieServer, target: Instance, damage: number) -> boolean", 1, true))
+		assert(not server:find("PlayEffect", 1, true))
+		assert(client:find("Leader: EnemyClient?", 1, true))
+		assert(client:find("PlayEffect: (self: ZombieClient, color: Color3) -> ()", 1, true))
+		assert(not client:find("Attack", 1, true))
+		assert(core:find("Leader: EnemyCore?", 1, true))
+		assert(not core:find("Attack", 1, true) and not core:find("PlayEffect", 1, true))
+	end,
+	["constructors preserve Roblox signatures and add literal custom overloads"] = function()
+		local source = ApiSource.build(typedSurface())
+		assert(source:find("type ServerNew = typeof(RobloxInstance.new)", 1, true))
+		assert(source:find('& ((className: "Zombie", parent: Instance?) -> ZombieServer)', 1, true))
+		assert(source:find('& ((className: FraguaTypeItem<"Zombie">, parent: Instance?) -> ZombieServer)', 1, true))
+		assert(source:find("type ClientNew = typeof(RobloxInstance.new)", 1, true))
+		assert(source:find("type CoreNew = typeof(RobloxInstance.new)", 1, true))
+	end,
+	["facade casts preserve inferred values for Clone fromExisting and Get"] = function()
+		local source = ApiSource.build(typedSurface())
+		assert(aliasBlock(source, "ZombieServer"):find("Clone: (self: ZombieServer) -> ZombieServer?", 1, true))
+		assert(source:find("type ServerFromExisting = typeof(RobloxInstance.fromExisting)", 1, true))
+		assert(source:find("& (<T>(existing: T & Instance) -> T?)", 1, true))
+		assert(source:find("Get: <T>(value: T & Instance) -> T", 1, true))
+		assert(source:find("local Server = ServerRuntime :: typeof(ServerRuntime) & ServerFacade", 1, true))
+		assert(source:find("local Client = ClientRuntime :: typeof(ClientRuntime) & ClientFacade", 1, true))
+		assert(source:find("local Core = CoreRuntime :: typeof(CoreRuntime) & CoreFacade", 1, true))
+	end,
+	["populated generated gateway compiles as Luau"] = function()
+		local source = ApiSource.build(typedSurface())
+		local compiled, chunk = pcall(loadstring, source, "TypedFragua")
+		assert(compiled and chunk, tostring(chunk))
+	end,
+	["typed behavior varargs compile in generated function types"] = function()
+		local surface = typedSurface()
+		table.insert(surface.types[2].serverMethods, {
+			name = "DamageMany",
+			parameters = { { name = "...", typeName = "number" } },
+			returns = "number",
+		})
+		local source = ApiSource.build(surface)
+		assert(source:find("DamageMany: (self: ZombieServer, ...number) -> number", 1, true))
+		local compiled, chunk = pcall(loadstring, source, "VarargFragua")
+		assert(compiled and chunk, tostring(chunk))
+	end,
+	["unsafe names and annotations cannot break generated source"] = function()
+		local source = ApiSource.build({
+			types = {
+				{
+					id = 'Bad-Type"\\',
+					backingClass = "Part; error()",
+					properties = {
+						{ name = "health-value", typeName = "number; error()" },
+					},
+					serverMethods = {
+						{
+							name = "Do-Bad",
+							parameters = { { name = "x", typeName = "number --[[" } },
+							returns = "boolean; error()",
+						},
+					},
+					clientMethods = {},
+				},
+			},
+		})
+		assert(not source:find("number; error()", 1, true))
+		assert(not source:find("boolean; error()", 1, true))
+		local compiled, chunk = pcall(loadstring, source, "EscapedFragua")
+		assert(compiled and chunk, tostring(chunk))
+	end,
+	["startup builds and synchronizes one current surface before injection"] = function()
+		local source = fs.readFile("src/init.server.luau")
+		local seedAt = assert(source:find("Registry.seedDefaults()", 1, true))
+		local buildAt = assert(source:find("local currentSurface = buildSurface()", seedAt, true))
+		local catalogAt = assert(source:find("TypeCatalog.sync(Registry, currentSurface)", buildAt, true))
+		local gatewayAt = assert(source:find("EnsurePlaceModules.sync(currentSurface)", catalogAt, true))
+		local injectorAt = assert(source:find("ScriptInjector.start()", gatewayAt, true))
+		assert(seedAt < buildAt and buildAt < catalogAt and catalogAt < gatewayAt and gatewayAt < injectorAt)
+
+		local changedAt = assert(source:find("Registry.Changed:Connect(function()", injectorAt, true))
+		local rebuildAt = assert(source:find("currentSurface = buildSurface()", changedAt, true))
+		local resyncCatalogAt = assert(source:find("TypeCatalog.sync(Registry, currentSurface)", rebuildAt, true))
+		local resyncGatewayAt = assert(source:find("EnsurePlaceModules.sync(currentSurface)", resyncCatalogAt, true))
+		assert(rebuildAt < resyncCatalogAt and resyncCatalogAt < resyncGatewayAt)
+	end,
+	["catalog and gateway consume the supplied surface"] = function()
+		local catalogSource = fs.readFile("src/App/Runtime/TypeCatalog.luau")
+		local syncAt = assert(catalogSource:find("function TypeCatalog.sync(registry, surface)", 1, true))
+		assert(catalogSource:find("for _, entry in surface.types do", syncAt, true))
+		local gatewaySource = fs.readFile("src/App/Runtime/EnsurePlaceModules.luau")
+		assert(gatewaySource:find("function EnsurePlaceModules.sync(surface: any)", 1, true))
 	end,
 	["facades isolate cached wrappers and behavior sides"] = function()
 		local source = buildSource()

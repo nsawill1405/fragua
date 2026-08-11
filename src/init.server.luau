@@ -9,14 +9,36 @@ local SettingsStore = require(script.App.Settings.Store)
 local EnsurePlaceModules = require(script.App.Runtime.EnsurePlaceModules)
 local ScriptInjector = require(script.App.Runtime.ScriptInjector)
 local TypeCatalog = require(script.App.Runtime.TypeCatalog)
+local TypeSurface = require(script.App.Runtime.TypeSurface)
 local Host = require(script.App.Behaviors.Host)
 local Registry = require(script.App.Types.Registry)
 local Constants = require(script.App.Shared.Constants)
 local LifecycleGate = require(script.App.Shared.LifecycleGate)
 
 SettingsStore.bind(plugin)
-EnsurePlaceModules.sync()
+
+Registry.seedDefaults()
+local behaviorSync = Registry.watchBehaviorTemplates()
+
+local function buildSurface()
+	return TypeSurface.build(Registry.list(), function(definition)
+		return Registry.resolvedSchema(definition)
+	end, function(typeId)
+		return Registry.getBackingClass(typeId)
+	end, function(typeId, side)
+		return Registry.getBehaviorSource(typeId, side)
+	end)
+end
+
+local currentSurface = buildSurface()
+TypeCatalog.sync(Registry, currentSurface)
+EnsurePlaceModules.sync(currentSurface)
 local scriptInjector = ScriptInjector.start()
+local catalogConnection = Registry.Changed:Connect(function()
+	currentSurface = buildSurface()
+	TypeCatalog.sync(Registry, currentSurface)
+	EnsurePlaceModules.sync(currentSurface)
+end)
 
 local toolbar = plugin:CreateToolbar(Constants.PLUGIN_NAME)
 
@@ -47,12 +69,6 @@ local propertiesWidget = plugin:CreateDockWidgetPluginGuiAsync("FraguaProperties
 propertiesWidget.Title = "Fragua Properties"
 propertiesWidget.Name = "FraguaProperties"
 
-Registry.seedDefaults()
-local behaviorSync = Registry.watchBehaviorTemplates()
-TypeCatalog.sync(Registry)
-local catalogConnection = Registry.Changed:Connect(function()
-	TypeCatalog.sync(Registry)
-end)
 Host.start()
 
 local explorerApi = Explorer.mount(explorerWidget)
