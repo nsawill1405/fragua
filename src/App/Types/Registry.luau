@@ -5,6 +5,7 @@ local Selection = game:GetService("Selection")
 local ServerStorage = game:GetService("ServerStorage")
 
 local Constants = require(script.Parent.Parent.Shared.Constants)
+local BehaviorModel = require(script.Parent.BehaviorModel)
 local BehaviorTemplatePolicy = require(script.Parent.BehaviorTemplatePolicy)
 local BackingClassResolver = require(script.Parent.BackingClassResolver)
 local BackingUpgradePolicy = require(script.Parent.BackingUpgradePolicy)
@@ -199,7 +200,9 @@ function Registry.save(def: TypeDef)
 			existing:Destroy()
 		end
 	end
-	Registry.ensureBehaviorTemplate(def.id)
+	for _, side in BehaviorModel.SIDES do
+		Registry.ensureBehaviorTemplate(def.id, side)
+	end
 	fireChanged()
 end
 
@@ -257,9 +260,15 @@ function Registry.delete(id: string): boolean
 		inst:Destroy()
 	end
 
-	local behaviorTemplate = folder:FindFirstChild(id .. "Behavior")
-	if behaviorTemplate then
-		behaviorTemplate:Destroy()
+	for _, side in BehaviorModel.SIDES do
+		local behaviorTemplate = folder:FindFirstChild(BehaviorModel.name(id, side))
+		if behaviorTemplate then
+			behaviorTemplate:Destroy()
+		end
+	end
+	local legacyBehavior = folder:FindFirstChild(id .. "Behavior")
+	if legacyBehavior then
+		legacyBehavior:Destroy()
 	end
 
 	existing:Destroy()
@@ -368,8 +377,9 @@ function Registry.applyType(instance: Instance, typeId: string): boolean
 			instance:SetAttribute(prop.name, prop.default)
 		end
 	end
-	Registry.ensureBehaviorTemplate(def.id)
-	Registry.applyBehaviorTemplate(instance, def.id)
+	for _, side in BehaviorModel.SIDES do
+		Registry.ensureBehaviorTemplate(def.id, side)
+	end
 	fireChanged()
 	ChangeHistoryService:SetWaypoint("Fragua Change Type Done")
 	return true
@@ -419,15 +429,11 @@ function Registry.createInstance(typeId: string, parent: Instance?): Instance
 	CollectionService:AddTag(inst, Constants.TAG)
 	applySchemaAttributes(inst, def)
 
-	Registry.ensureBehaviorTemplate(def.id)
-
-	local behavior = Instance.new("ModuleScript")
-	behavior.Name = Constants.BEHAVIOR_NAME
-	behavior:SetAttribute("_FraguaInstanceBehavior", true)
-	behavior.Parent = inst
+	for _, side in BehaviorModel.SIDES do
+		Registry.ensureBehaviorTemplate(def.id, side)
+	end
 
 	inst.Parent = parent
-	Registry.applyBehaviorTemplate(inst, def.id)
 	return inst
 end
 
@@ -507,8 +513,9 @@ function Registry.upgradeBackingInstance(instance: Instance): (Instance?, string
 	replacement.Parent = oldParent
 	Selection:Set(replacementSelection)
 	instance:Destroy()
-	Registry.ensureBehaviorTemplate(typeId)
-	Registry.applyBehaviorTemplate(replacement, typeId)
+	for _, side in BehaviorModel.SIDES do
+		Registry.ensureBehaviorTemplate(typeId, side)
+	end
 	fireChanged()
 	ChangeHistoryService:SetWaypoint("Fragua Upgrade Backing Instance Done")
 	return replacement, nil
@@ -537,7 +544,7 @@ function Registry.seedDefaults()
 	})
 
 	-- Replace default behavior with nameplate demo for Zombie
-	local template = Registry.ensureBehaviorTemplate("Zombie")
+	local template = Registry.ensureBehaviorTemplate("Zombie", "Edit")
 	template.Source = [[
 local Behavior = {}
 
@@ -594,18 +601,11 @@ function Behavior.onAncestryChanged(instance)
 	ensureNameplate(instance)
 end
 
-function Behavior.onStart(instance)
-	ensureNameplate(instance)
-end
-
-function Behavior.onStop(_instance)
-end
-
 return Behavior
 ]]
 end
 
-local function defaultBehaviorSource(typeId: string): string
+local function legacyDefaultBehaviorSource(typeId: string): string
 	return table.concat({
 		"-- Fragua shared behavior for " .. typeId,
 		"-- Edited once; synced to every instance of this type.",
@@ -655,8 +655,33 @@ local function ensureBehaviorBackups(): Folder
 	return folder
 end
 
-function Registry.canonicalizeBehaviorTemplate(typeId: string): ModuleScript?
-	local behaviorName = typeId .. "Behavior"
+local function nextBackupName(backups: Folder, typeId: string): string
+	local existing = {}
+	for _, child in backups:GetChildren() do
+		existing[child.Name] = true
+	end
+	return BehaviorTemplatePolicy.backupName(existing, typeId)
+end
+
+local function moveToBehaviorBackups(typeId: string, template: ModuleScript)
+	template:SetAttribute("_FraguaSharedBehavior", nil)
+	template:SetAttribute("_FraguaBehaviorSide", nil)
+	local backups = ensureBehaviorBackups()
+	template.Name = nextBackupName(backups, typeId)
+	template.Parent = backups
+end
+
+local function preserveBehaviorBackup(typeId: string, template: ModuleScript)
+	local backup = template:Clone()
+	moveToBehaviorBackups(typeId, backup)
+end
+
+local function canonicalizeNamedBehavior(
+	typeId: string,
+	behaviorName: string,
+	generatedSource: string,
+	side: string?
+): ModuleScript?
 	local candidates = {}
 	local sources = {}
 	for _, child in Registry.typesFolder():GetChildren() do
@@ -669,23 +694,14 @@ function Registry.canonicalizeBehaviorTemplate(typeId: string): ModuleScript?
 		return nil
 	end
 
-	local plan = BehaviorTemplatePolicy.plan(sources, defaultBehaviorSource(typeId))
+	local plan = BehaviorTemplatePolicy.plan(sources, generatedSource)
 	local canonical = candidates[plan.keep]
 	canonical.Name = behaviorName
 	canonical:SetAttribute("_FraguaSharedBehavior", true)
+	canonical:SetAttribute("_FraguaBehaviorSide", side)
 
 	for _, index in plan.backup do
-		local backup = candidates[index]
-		backup:SetAttribute("_FraguaSharedBehavior", nil)
-		local backups = ensureBehaviorBackups()
-		local suffix = 1
-		local backupName = typeId .. "BehaviorBackup" .. tostring(suffix)
-		while backups:FindFirstChild(backupName) do
-			suffix += 1
-			backupName = typeId .. "BehaviorBackup" .. tostring(suffix)
-		end
-		backup.Name = backupName
-		backup.Parent = backups
+		moveToBehaviorBackups(typeId, candidates[index])
 	end
 	for _, index in plan.discard do
 		candidates[index]:Destroy()
@@ -693,64 +709,101 @@ function Registry.canonicalizeBehaviorTemplate(typeId: string): ModuleScript?
 	return canonical
 end
 
-function Registry.getSharedBehavior(typeId: string): ModuleScript?
-	return Registry.canonicalizeBehaviorTemplate(typeId)
+local function canonicalizeLegacyBehavior(typeId: string): ModuleScript?
+	return canonicalizeNamedBehavior(typeId, typeId .. "Behavior", legacyDefaultBehaviorSource(typeId), nil)
 end
 
-function Registry.ensureBehaviorTemplate(typeId: string): ModuleScript
-	local existing = Registry.getSharedBehavior(typeId)
-	if existing then
-		return existing
-	end
+local function createBehaviorTemplate(typeId: string, side: string, source: string): ModuleScript
 	local template = Instance.new("ModuleScript")
-	template.Name = typeId .. "Behavior"
-	template.Source = defaultBehaviorSource(typeId)
+	template.Name = BehaviorModel.name(typeId, side)
+	template.Source = source
 	template:SetAttribute("_FraguaSharedBehavior", true)
+	template:SetAttribute("_FraguaBehaviorSide", side)
 	template.Parent = Registry.typesFolder()
 	return template
 end
 
-function Registry.getBehaviorSource(typeId: string): string?
-	local template = Registry.getSharedBehavior(typeId)
+function Registry.canonicalizeBehaviorTemplate(typeId: string, side: string): ModuleScript?
+	return canonicalizeNamedBehavior(
+		typeId,
+		BehaviorModel.name(typeId, side),
+		BehaviorModel.defaultSource(typeId, side),
+		side
+	)
+end
+
+local function migrateLegacyBehavior(typeId: string)
+	for _, side in BehaviorModel.SIDES do
+		Registry.canonicalizeBehaviorTemplate(typeId, side)
+	end
+
+	local legacy = canonicalizeLegacyBehavior(typeId)
+	if not legacy then
+		return
+	end
+
+	-- Preserve the winning legacy source before it becomes the canonical Edit template.
+	preserveBehaviorBackup(typeId, legacy)
+
+	local edit = Registry.canonicalizeBehaviorTemplate(typeId, "Edit")
+	if edit then
+		legacy:Destroy()
+	else
+		legacy.Name = BehaviorModel.name(typeId, "Edit")
+		legacy:SetAttribute("_FraguaSharedBehavior", true)
+		legacy:SetAttribute("_FraguaBehaviorSide", "Edit")
+	end
+
+	if not Registry.canonicalizeBehaviorTemplate(typeId, "Server") then
+		createBehaviorTemplate(typeId, "Server", BehaviorModel.serverMigrationSource(typeId))
+	end
+	if not Registry.canonicalizeBehaviorTemplate(typeId, "Client") then
+		createBehaviorTemplate(typeId, "Client", BehaviorModel.defaultSource(typeId, "Client"))
+	end
+end
+
+function Registry.ensureBehaviorTemplate(typeId: string, side: string): ModuleScript
+	BehaviorModel.name(typeId, side)
+	migrateLegacyBehavior(typeId)
+	local existing = Registry.canonicalizeBehaviorTemplate(typeId, side)
+	if existing then
+		return existing
+	end
+	return createBehaviorTemplate(typeId, side, BehaviorModel.defaultSource(typeId, side))
+end
+
+function Registry.getBehaviorSource(typeId: string, side: string): string?
+	BehaviorModel.name(typeId, side)
+	migrateLegacyBehavior(typeId)
+	local template = Registry.canonicalizeBehaviorTemplate(typeId, side)
 	if template then
 		return template.Source
 	end
 	return nil
 end
 
-function Registry.applyBehaviorTemplate(instance: Instance, typeId: string)
-	local source = Registry.getBehaviorSource(typeId)
-	local behavior = instance:FindFirstChild(Constants.BEHAVIOR_NAME)
-	if source and behavior and behavior:IsA("ModuleScript") then
-		behavior.Source = source
-	end
-end
-
--- Push shared Behavior source onto every placed instance of this type
-function Registry.syncBehaviorToInstances(typeId: string)
-	local source = Registry.getBehaviorSource(typeId)
-	if not source then
-		return
-	end
-	for _, inst in Registry.findInstances(typeId) do
-		local behavior = inst:FindFirstChild(Constants.BEHAVIOR_NAME)
-		if behavior and behavior:IsA("ModuleScript") then
-			behavior.Source = source
+function Registry.setBehaviorSource(typeId: string, side: string, source: string)
+	local template = Registry.ensureBehaviorTemplate(typeId, side)
+	template.Source = source
+	if side == "Edit" then
+		-- Notify the edit-time host if present (avoid a hard require cycle).
+		local ok, Host = pcall(function()
+			return require(script.Parent.Parent.Behaviors.Host)
+		end)
+		if ok and Host and Host.invalidateType then
+			Host.invalidateType(typeId)
 		end
 	end
 end
 
-function Registry.setSharedBehaviorSource(typeId: string, source: string)
-	local template = Registry.ensureBehaviorTemplate(typeId)
-	template.Source = source
-	Registry.syncBehaviorToInstances(typeId)
-	-- notify edit-time host if present (avoid hard require cycle)
-	local ok, Host = pcall(function()
-		return require(script.Parent.Parent.Behaviors.Host)
-	end)
-	if ok and Host and Host.invalidateType then
-		Host.invalidateType(typeId)
+local function behaviorTemplateIdentity(template: ModuleScript): (string?, string?)
+	for _, side in BehaviorModel.SIDES do
+		local suffix = side .. "Behavior"
+		if string.sub(template.Name, -#suffix) == suffix then
+			return string.sub(template.Name, 1, #template.Name - #suffix), side
+		end
 	end
+	return nil, nil
 end
 
 function Registry.watchBehaviorTemplates()
@@ -762,11 +815,11 @@ function Registry.watchBehaviorTemplates()
 		if stopped or watched[template] or not template:IsA("ModuleScript") then
 			return
 		end
-		if template:GetAttribute("_FraguaSharedBehavior") ~= true then
+		local typeId, side = behaviorTemplateIdentity(template)
+		if not typeId or not side then
 			return
 		end
-		local typeId = template.Name:gsub("Behavior$", "")
-		local canonical = Registry.canonicalizeBehaviorTemplate(typeId)
+		local canonical = Registry.canonicalizeBehaviorTemplate(typeId, side)
 		if not canonical then
 			return
 		end
@@ -782,12 +835,13 @@ function Registry.watchBehaviorTemplates()
 					if stopped or not template.Parent then
 						return
 					end
-					Registry.syncBehaviorToInstances(typeId)
-					local ok, Host = pcall(function()
-						return require(script.Parent.Parent.Behaviors.Host)
-					end)
-					if ok and Host and Host.invalidateType then
-						Host.invalidateType(typeId)
+					if side == "Edit" then
+						local ok, Host = pcall(function()
+							return require(script.Parent.Parent.Behaviors.Host)
+						end)
+						if ok and Host and Host.invalidateType then
+							Host.invalidateType(typeId)
+						end
 					end
 					fireChanged()
 				end)
@@ -795,11 +849,39 @@ function Registry.watchBehaviorTemplates()
 		)
 	end
 
+	for _, def in Registry.list() do
+		for _, side in BehaviorModel.SIDES do
+			Registry.ensureBehaviorTemplate(def.id, side)
+		end
+	end
+
 	local folder = Registry.typesFolder()
 	for _, child in folder:GetChildren() do
 		watch(child)
 	end
-	table.insert(connections, folder.ChildAdded:Connect(watch))
+	table.insert(
+		connections,
+		folder.ChildAdded:Connect(function(child)
+			if child:IsA("ModuleScript") then
+				local typeId, side = behaviorTemplateIdentity(child)
+				if typeId and side then
+					Registry.canonicalizeBehaviorTemplate(typeId, side)
+					watch(child)
+					return
+				end
+				local legacyTypeId = string.match(child.Name, "^(.*)Behavior$")
+				if legacyTypeId then
+					migrateLegacyBehavior(legacyTypeId)
+					for _, migratedSide in BehaviorModel.SIDES do
+						local migrated = Registry.canonicalizeBehaviorTemplate(legacyTypeId, migratedSide)
+						if migrated then
+							watch(migrated)
+						end
+					end
+				end
+			end
+		end)
+	)
 
 	return {
 		destroy = function()

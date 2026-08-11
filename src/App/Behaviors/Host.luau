@@ -1,4 +1,5 @@
 local CollectionService = game:GetService("CollectionService")
+local RunService = game:GetService("RunService")
 local Constants = require(script.Parent.Parent.Shared.Constants)
 local Registry = require(script.Parent.Parent.Types.Registry)
 local Util = require(script.Parent.Parent.Shared.Util)
@@ -20,21 +21,22 @@ local function unload(instance: Instance)
 end
 
 local function loadBehavior(instance: Instance)
+	if not RunService:IsEdit() then
+		return nil
+	end
 	if loaded[instance] then
 		return loaded[instance]
 	end
-	-- keep instance Behavior Source in sync with shared template
 	local typeId = Registry.getTypeId(instance)
-	if typeId then
-		Registry.applyBehaviorTemplate(instance, typeId)
-	end
-	local module = instance:FindFirstChild(Constants.BEHAVIOR_NAME)
-	if not module or not module:IsA("ModuleScript") then
+	if not typeId then
 		return nil
 	end
-	-- loadstring so shared Behavior edits hot-reload in edit mode (require caches)
-	local source = module.Source
-	local chunk, err = loadstring(source, instance:GetFullName() .. ".Behavior")
+	local source = Registry.getBehaviorSource(typeId, "Edit")
+	if not source then
+		return nil
+	end
+	-- loadstring so shared Edit Behavior edits hot-reload in Studio (require caches).
+	local chunk, err = loadstring(source, instance:GetFullName() .. ".EditBehavior")
 	if not chunk then
 		warn(`[Fragua] Failed to compile behavior for {instance:GetFullName()}: {err}`)
 		return nil
@@ -49,6 +51,9 @@ local function loadBehavior(instance: Instance)
 end
 
 local function callHook(instance: Instance, hook: string, ...)
+	if not RunService:IsEdit() then
+		return
+	end
 	local behavior = loadBehavior(instance)
 	if behavior and typeof(behavior[hook]) == "function" then
 		local args = table.pack(...)
@@ -59,7 +64,7 @@ local function callHook(instance: Instance, hook: string, ...)
 end
 
 local function watch(instance: Instance)
-	if connections[instance] then
+	if not RunService:IsEdit() or connections[instance] then
 		return
 	end
 	local cons = {}
@@ -91,14 +96,19 @@ function Host.invalidateType(typeId: string)
 			unload(inst)
 		end
 	end
-	for _, inst in CollectionService:GetTagged(Constants.TAG) do
-		if Registry.getTypeId(inst) == typeId then
-			watch(inst)
+	if RunService:IsEdit() then
+		for _, inst in CollectionService:GetTagged(Constants.TAG) do
+			if Registry.getTypeId(inst) == typeId then
+				watch(inst)
+			end
 		end
 	end
 end
 
 function Host.start()
+	if not RunService:IsEdit() then
+		return
+	end
 	Registry.ensureRoot()
 
 	for _, inst in CollectionService:GetTagged(Constants.TAG) do
@@ -114,6 +124,9 @@ function Host.start()
 end
 
 function Host.onSelection(instances: { Instance })
+	if not RunService:IsEdit() then
+		return
+	end
 	for _, inst in instances do
 		if Registry.isFraguaInstance(inst) then
 			callHook(inst, "onSelected")
@@ -122,6 +135,9 @@ function Host.onSelection(instances: { Instance })
 end
 
 function Host.runCreated(instance: Instance)
+	if not RunService:IsEdit() then
+		return
+	end
 	watch(instance)
 	callHook(instance, "onCreated")
 end

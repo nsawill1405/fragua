@@ -19,6 +19,7 @@ TestRunner.run({
 	PropertiesCategoryOrder = require("./PropertiesCategoryOrder.spec"),
 	LifecycleGate = require("./LifecycleGate.spec"),
 	MetadataModel = require("./MetadataModel.spec"),
+	BehaviorModel = require("./BehaviorModel.spec"),
 	BehaviorTemplatePolicy = require("./BehaviorTemplatePolicy.spec"),
 	ScriptHeader = require("./ScriptHeader.spec"),
 	ScriptUpdateGate = require("./ScriptUpdateGate.spec"),
