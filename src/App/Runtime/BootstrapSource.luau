@@ -38,21 +38,26 @@ local function start(instance: Instance)
 
 	local state = { typeId = typeId, behavior = nil }
 	started[instance] = state
-	local phase = "load"
-	local ok, problem = pcall(function()
-		local template = findTemplate(typeId)
-		assert(template, `missing {typeId .. TEMPLATE_SUFFIX}`)
-		local behavior = require(template)
-		assert(typeof(behavior) == "table", "behavior module must return a table")
-		state.behavior = behavior
-		if typeof(behavior.onStart) == "function" then
-			phase = "onStart"
-			behavior.onStart(instance)
+	task.spawn(function()
+		local phase = "load"
+		local ok, problem = pcall(function()
+			local template = findTemplate(typeId)
+			assert(template, `missing {typeId .. TEMPLATE_SUFFIX}`)
+			local behavior = require(template)
+			assert(typeof(behavior) == "table", "behavior module must return a table")
+			if started[instance] ~= state then
+				return
+			end
+			state.behavior = behavior
+			if typeof(behavior.onStart) == "function" then
+				phase = "onStart"
+				behavior.onStart(instance)
+			end
+		end)
+		if not ok then
+			warnFailure(instance, typeId, phase, problem)
 		end
 	end)
-	if not ok then
-		warnFailure(instance, typeId, phase, problem)
-	end
 end
 
 local function stop(instance: Instance)
@@ -70,12 +75,12 @@ local function stop(instance: Instance)
 	end
 end
 
+CollectionService:GetInstanceAddedSignal(TAG):Connect(start)
+CollectionService:GetInstanceRemovedSignal(TAG):Connect(stop)
+
 for _, instance in CollectionService:GetTagged(TAG) do
 	start(instance)
 end
-
-CollectionService:GetInstanceAddedSignal(TAG):Connect(start)
-CollectionService:GetInstanceRemovedSignal(TAG):Connect(stop)
 
 game:BindToClose(function()
 	for instance in started do
