@@ -1,3 +1,6 @@
+local Util = if script then require(script.Parent.Parent.Shared.Util) else require("../Shared/Util")
+local TypeValue = if script then require(script.Parent.TypeValue) else require("./TypeValue")
+
 local TypeDraft = {}
 
 local function nextId(draft, kind: string): string
@@ -50,16 +53,28 @@ function TypeDraft.removeCategory(draft, categoryId: string)
 	end
 end
 
-function TypeDraft.addProperty(draft, categoryId: string, name: string, valueType: string, defaultText: string): string
+function TypeDraft.addProperty(draft, categoryId: string, name: string, valueType: string, defaultInput: any): string
 	assert(draft.categories[categoryId], `Unknown category id: {categoryId}`)
 	local id = nextId(draft, "property")
-	draft.properties[id] = {
+	local property = {
 		id = id,
 		categoryId = categoryId,
 		name = name,
 		valueType = valueType,
-		defaultText = defaultText,
 	}
+	if typeof(defaultInput) == "string" then
+		property.defaultText = defaultInput
+		local parsed, value = Util.parseValue(valueType, defaultInput)
+		if parsed then
+			property.defaultValue = value
+		else
+			property.defaultInputError = `Default is not a valid {valueType}.`
+		end
+	else
+		property.defaultValue = defaultInput
+		property.defaultText = Util.formatValue(defaultInput)
+	end
+	draft.properties[id] = property
 	table.insert(draft.propertyOrder, id)
 	return id
 end
@@ -80,6 +95,18 @@ function TypeDraft.updateProperty(draft, propertyId: string, changes)
 	for key, value in changes do
 		property[key] = value
 	end
+	if changes.defaultText ~= nil or changes.valueType ~= nil then
+		local parsed, value = Util.parseValue(property.valueType, property.defaultText or "")
+		if parsed then
+			property.defaultValue = value
+			property.defaultInputError = nil
+		else
+			property.defaultValue = nil
+			property.defaultInputError = `Default is not a valid {property.valueType}.`
+		end
+	elseif changes.defaultValue ~= nil then
+		property.defaultInputError = nil
+	end
 end
 
 function TypeDraft.snapshotEditableProperties(draft)
@@ -98,23 +125,6 @@ function TypeDraft.snapshotEditableProperties(draft)
 		end
 	end
 	return snapshot
-end
-
-local function validDefault(valueType: string, text: string): boolean
-	if valueType == "string" then
-		return true
-	elseif valueType == "number" then
-		return tonumber(text) ~= nil
-	elseif valueType == "boolean" then
-		return text == "true" or text == "false" or text == "1" or text == "0"
-	elseif valueType == "Color3" then
-		local r, g, b = text:match("^%s*([%d%.]+)%s*,%s*([%d%.]+)%s*,%s*([%d%.]+)%s*$")
-		return r ~= nil and tonumber(r) ~= nil and tonumber(g) ~= nil and tonumber(b) ~= nil
-	elseif valueType == "Vector3" then
-		local x, y, z = text:match("^%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*$")
-		return x ~= nil and tonumber(x) ~= nil and tonumber(y) ~= nil and tonumber(z) ~= nil
-	end
-	return false
 end
 
 function TypeDraft.validate(draft, lookupType)
@@ -139,11 +149,12 @@ function TypeDraft.validate(draft, lookupType)
 			else
 				seenNames[property.name] = true
 			end
-			if not validDefault(property.valueType, property.defaultText) then
+			local valid, message = TypeValue.validate(property.valueType, property.defaultValue, property)
+			if property.defaultInputError or not valid then
 				table.insert(errors, {
 					fieldId = propertyId,
 					code = "invalid-default",
-					message = `Default for "{property.name}" is not a valid {property.valueType}.`,
+					message = message or `Default for "{property.name}" is not a valid {property.valueType}.`,
 				})
 			end
 		end

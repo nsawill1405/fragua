@@ -1,6 +1,13 @@
 local TypeDraft = require("../src/App/Types/TypeDraft")
 
 return {
+	["stores typed property defaults"] = function()
+		local draft = TypeDraft.new("Zombie")
+		local categoryId = TypeDraft.addCategory(draft, "Data")
+		local propertyId = TypeDraft.addProperty(draft, categoryId, "Enabled", "boolean", false)
+		TypeDraft.updateProperty(draft, propertyId, { defaultValue = true })
+		assert(TypeDraft.snapshotEditableProperties(draft)[1].defaultValue == true)
+	end,
 	["keeps property category identity stable across rename"] = function()
 		local draft = TypeDraft.new("Zombie")
 		local categoryId = TypeDraft.addCategory(draft, "AI")
