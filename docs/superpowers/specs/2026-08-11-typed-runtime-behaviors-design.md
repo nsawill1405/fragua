@@ -63,7 +63,7 @@ Native methods returned through `__index` are bound to the backing object and ca
 
 Fragua APIs, forwarded native property writes, and forwarded native method arguments unwrap Fragua wrappers automatically. External Roblox APIs called directly with a wrapper receive `value.Instance`; a table cannot be made genuine userdata, so this is the one deliberate interop boundary.
 
-Wrappers are cached weakly by backing instance so repeated `Fragua.Get(backing)` calls return the same live wrapper. Access after destruction produces a concise Fragua error rather than an unrelated nil-index failure.
+Wrappers are cached weakly by facade and backing instance so repeated `Fragua.Get(backing)` calls through the same facade return the same live wrapper without leaking Server methods into Core or Client wrappers. Access after destruction produces a concise Fragua error rather than an unrelated nil-index failure.
 
 ## Split behavior model
 
