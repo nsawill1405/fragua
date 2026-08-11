@@ -10,6 +10,7 @@ TestRunner.run({
 	ColorText = require("./ColorText.spec"),
 	PreviewCommit = require("./PreviewCommit.spec"),
 	PropertyRefreshPolicy = require("./PropertyRefreshPolicy.spec"),
+	DefaultControlModel = require("./DefaultControlModel.spec"),
 	SchemaResolver = require("./SchemaResolver.spec"),
 	TypeEditorLayout = require("./TypeEditorLayout.spec"),
 	InsertFlow = require("./InsertFlow.spec"),
