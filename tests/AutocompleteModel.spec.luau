@@ -132,4 +132,17 @@ return {
 			)
 		)
 	end,
+	["extracts at most the current line and 200 predecessors"] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local lines = {}
+		for index = 1, 1000 do
+			table.insert(lines, "ignored" .. index)
+		end
+		table.insert(lines, "current")
+		local extracted =
+			Model.extractContext({ line = table.concat(lines, "\n"), position = #table.concat(lines, "\n") })
+		assert(#extracted == 201)
+		assert(extracted[1] == "ignored801")
+		assert(extracted[#extracted] == "current")
+	end,
 }
