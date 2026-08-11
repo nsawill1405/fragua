@@ -17,4 +17,23 @@ return {
 		assert(not WrapperPolicy.wrapperMembers.Name)
 		assert(not WrapperPolicy.wrapperMembers.Archivable)
 	end,
+	["current Object and Instance members are reserved"] = function()
+		for _, name in
+			{
+				"Changed",
+				"ClassName",
+				"GetPropertyChangedSignal",
+				"Capabilities",
+				"PredictionMode",
+				"Sandboxed",
+				"GetStyled",
+				"GetStyledPropertyChangedSignal",
+				"QueryDescendants",
+				"StyledPropertiesChanged",
+			}
+		do
+			assert(WrapperPolicy.nativeInstanceMembers[name], `{name} should be in the shared native member set`)
+			assert(WrapperPolicy.isReserved(name, {}), `{name} should be reserved`)
+		end
+	end,
 }

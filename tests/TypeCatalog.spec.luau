@@ -49,4 +49,14 @@ return {
 		assert(not source:find('ensureBehaviorTemplate(entry.id, "Edit")', 1, true))
 		assert(not source:find('ensureBehaviorTemplate(entry.id, "Server")', 1, true))
 	end,
+	["native collision metadata covers known concrete abstract and service classes"] = function()
+		assert(ok and TypeCatalog, "TypeCatalog should be available")
+		local names = TypeCatalog.nativeClassNames()
+		for _, expected in { "Instance", "Part", "BasePart", "GuiObject", "Workspace", "ServerStorage" } do
+			assert(table.find(names, expected), `missing native class metadata for {expected}`)
+		end
+		for index = 2, #names do
+			assert(names[index - 1] < names[index], "native class metadata should be sorted and unique")
+		end
+	end,
 }

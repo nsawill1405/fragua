@@ -1,8 +1,13 @@
+local EngineSchemas = if script
+	then require(script.Parent.Parent.Types.EngineSchemas)
+	else require("../Types/EngineSchemas")
+
 local TypeCatalog = {}
 
 local CATALOG_NAME = "FraguaTypes"
 local PRIVATE_BEHAVIOR_NAMES = { "Behavior", "EditBehavior", "ServerBehavior" }
 local REFERENCE_PREFIX = "_FraguaRef_"
+local NATIVE_CLASSES_NAME = "_FraguaNativeClasses"
 
 local function cloneProperty(property)
 	local copy = table.clone(property)
@@ -47,6 +52,10 @@ function TypeCatalog.snapshot(definitions, resolveSchema, resolveBackingClass)
 		})
 	end
 	return entries
+end
+
+function TypeCatalog.nativeClassNames(): { string }
+	return EngineSchemas.classNames()
 end
 
 local function ensureChild(parent: Instance, className: string, name: string): Instance
@@ -189,7 +198,10 @@ function TypeCatalog.sync(registry)
 	end, function(typeId)
 		return registry.getBackingClass(typeId)
 	end)
-	local active = {}
+	local active = { [NATIVE_CLASSES_NAME] = true }
+	local nativeClasses = ensureChild(root, "Folder", NATIVE_CLASSES_NAME)
+	nativeClasses:SetAttribute("_FraguaManaged", true)
+	syncOrderedStrings(nativeClasses, TypeCatalog.nativeClassNames())
 	for _, entry in entries do
 		active[entry.id] = true
 		local typeEntry = ensureChild(root, "Configuration", entry.id)

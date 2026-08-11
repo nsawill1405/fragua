@@ -72,6 +72,26 @@ return {
 		end
 		assert(collided[methodId] and collided[eventId])
 	end,
+	["rejects current inherited Object and Instance member collisions"] = function()
+		local draft = TypeDraft.new("Zombie")
+		local categoryId = TypeDraft.addCategory(draft, "Data")
+		local propertyIds = {}
+		for _, name in { "Changed", "GetStyled", "QueryDescendants", "StyledPropertiesChanged", "PredictionMode" } do
+			table.insert(propertyIds, TypeDraft.addProperty(draft, categoryId, name, "string", "hidden"))
+		end
+		local errors = TypeDraft.validate(draft, function()
+			return nil
+		end)
+		local collided = {}
+		for _, error in errors do
+			if error.code == "reserved-property" then
+				collided[error.fieldId] = true
+			end
+		end
+		for _, propertyId in propertyIds do
+			assert(collided[propertyId])
+		end
+	end,
 	["keeps property category identity stable across rename"] = function()
 		local draft = TypeDraft.new("Zombie")
 		local categoryId = TypeDraft.addCategory(draft, "AI")

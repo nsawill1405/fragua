@@ -60,6 +60,7 @@ local TAG = "FraguaInstance"
 local TYPE_ATTR = "_FraguaType"
 local CATALOG_NAME = "FraguaTypes"
 local REFERENCE_PREFIX = "_FraguaRef_"
+local NATIVE_CLASSES_NAME = "_FraguaNativeClasses"
 
 local CORE_MEMBERS = @@CORE_MEMBERS@@
 local LIFECYCLE_MEMBERS = @@LIFECYCLE_MEMBERS@@
@@ -88,6 +89,19 @@ local function findDefinition(typeId: string)
 		return definition
 	end
 	return nil
+end
+
+local function isKnownNativeClass(className: string): boolean
+	local root = catalog()
+	local nativeClasses = root and root:FindFirstChild(NATIVE_CLASSES_NAME)
+	if nativeClasses then
+		for _, entry in nativeClasses:GetChildren() do
+			if entry:IsA("StringValue") and entry.Value == className then
+				return true
+			end
+		end
+	end
+	return false
 end
 
 local CUSTOM_ITEM_METATABLE = {}
@@ -393,12 +407,18 @@ local function applyCustomDefaults(backing, definition)
 	end)
 end
 
-local function copyCustomValues(source, destination, definition)
+local function copyCustomValues(source, destination, definition, preserveDestinationReferences: boolean)
 	eachCustomProperty(definition, source, function(property, name)
 		if isReferenceProperty(property) then
-			local sourceReference = source:FindFirstChild(REFERENCE_PREFIX .. name)
-			local value = if sourceReference and sourceReference:IsA("ObjectValue") then sourceReference.Value else nil
-			ensureReference(destination, name).Value = value
+			local referenceName = REFERENCE_PREFIX .. name
+			local destinationReference = destination:FindFirstChild(referenceName)
+			if not (preserveDestinationReferences and destinationReference and destinationReference:IsA("ObjectValue")) then
+				local sourceReference = source:FindFirstChild(referenceName)
+				local value = if sourceReference and sourceReference:IsA("ObjectValue")
+					then sourceReference.Value
+					else nil
+				ensureReference(destination, name).Value = value
+			end
 		else
 			local value = source:GetAttribute(name)
 			destination:SetAttribute(name, value)
@@ -522,7 +542,7 @@ local function coreMember(state, key: string)
 				applyIdentity(clone, state.typeId)
 				local definition = findDefinition(state.typeId)
 				if definition then
-					copyCustomValues(state.backing, clone, definition)
+					copyCustomValues(state.backing, clone, definition, true)
 				end
 				return wrap(clone, state.side)
 			end
@@ -678,12 +698,15 @@ local function makeFacade(side: string)
 		end
 
 		if not forceCustom then
-			local nativeOk, native = pcall(function()
+			local nativeOk, nativeProblem = pcall(function()
 				return RobloxInstance.new(className)
 			end)
 			if nativeOk then
-				native.Parent = if parent == nil then nil else unwrap(parent)
-				return native
+				nativeProblem.Parent = if parent == nil then nil else unwrap(parent)
+				return nativeProblem
+			end
+			if isKnownNativeClass(className) then
+				error(nativeProblem, 2)
 			end
 		end
 
@@ -720,7 +743,7 @@ local function makeFacade(side: string)
 		applyIdentity(duplicate, typeId)
 		local definition = findDefinition(typeId)
 		if definition then
-			copyCustomValues(backing, duplicate, definition)
+			copyCustomValues(backing, duplicate, definition, false)
 		end
 		return wrap(duplicate, side)
 	end
