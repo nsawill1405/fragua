@@ -81,4 +81,33 @@ return {
 		assert(source:find('"StarterPlayerScripts"', 1, true))
 		assert(source:find("Source ~= source", 1, true))
 	end,
+	["managed gateway sync builds from an optional type surface"] = function()
+		local source = fs.readFile("src/App/Runtime/EnsurePlaceModules.luau")
+		assert(source:find("function EnsurePlaceModules.sync(surface", 1, true))
+		assert(source:find("ApiSource.build(surface or { types = {} })", 1, true))
+	end,
+	["registry storage protections consume the wrapper collision policy"] = function()
+		local source = fs.readFile("src/App/Types/Registry.luau")
+		assert(source:find("WrapperPolicy", 1, true))
+		assert(source:find("WrapperPolicy.isReserved", 1, true))
+	end,
+	["default custom types do not redeclare inherited native properties"] = function()
+		local source = fs.readFile("src/App/Types/Registry.luau")
+		local seedStart = assert(source:find("function Registry.seedDefaults()", 1, true))
+		local seedEnd = assert(source:find("-- Replace default behavior", seedStart, true))
+		local seed = source:sub(seedStart, seedEnd - 1)
+		assert(not seed:find('{ name = "DisplayName"', 1, true))
+		assert(not seed:find('{ name = "WalkSpeed"', 1, true))
+		assert(not seed:find('{ name = "MaxHealth"', 1, true))
+		assert(not seed:find('{ name = "Health"', 1, true))
+		assert(seed:find('{ name = "IsHostile"', 1, true))
+	end,
+	["registry validation probes concrete backing members before save"] = function()
+		local source = fs.readFile("src/App/Types/Registry.luau")
+		local save = assert(source:find("function Registry.save", 1, true))
+		local probe = assert(source:find("local backingProbe", save, true))
+		local read = assert(source:find("backingProbe[property.name]", probe, true))
+		local policy = assert(source:find("WrapperPolicy.isReserved", read, true))
+		assert(probe < read and read < policy)
+	end,
 }

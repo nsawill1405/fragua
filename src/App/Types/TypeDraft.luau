@@ -1,18 +1,11 @@
 local Util = if script then require(script.Parent.Parent.Shared.Util) else require("../Shared/Util")
 local TypeValue = if script then require(script.Parent.TypeValue) else require("./TypeValue")
 local EngineSchemas = if script then require(script.Parent.EngineSchemas) else nil
+local WrapperPolicy = if script
+	then require(script.Parent.Parent.Runtime.WrapperPolicy)
+	else require("../Runtime/WrapperPolicy")
 
 local TypeDraft = {}
-
-local CORE_RESERVED_PROPERTIES = {
-	Name = true,
-	Archivable = true,
-	_FraguaType = true,
-	_FraguaManaged = true,
-	_FraguaInstanceBehavior = true,
-	_FraguaSharedBehavior = true,
-	_FraguaBehaviorBackups = true,
-}
 
 local function nextId(draft, kind: string): string
 	draft.nextId += 1
@@ -140,7 +133,7 @@ function TypeDraft.snapshotEditableProperties(draft)
 end
 
 local function reservedPropertyNames(draft, lookupType)
-	local reserved = table.clone(CORE_RESERVED_PROPERTIES)
+	local reserved = {}
 	local visited = {}
 	local currentId = draft.extends
 
@@ -183,7 +176,7 @@ function TypeDraft.validate(draft, lookupType)
 					code = "invalid-property-name",
 					message = `"{property.name}" is not a valid property identifier.`,
 				})
-			elseif reservedNames[property.name] then
+			elseif WrapperPolicy.isReserved(property.name, reservedNames) then
 				table.insert(errors, {
 					fieldId = propertyId,
 					code = "reserved-property",

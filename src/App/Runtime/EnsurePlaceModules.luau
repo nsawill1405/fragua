@@ -28,8 +28,8 @@ local function ensureModule(parent: Instance, name: string, source: string, clas
 	return inst
 end
 
-function EnsurePlaceModules.sync()
-	ensureModule(ReplicatedStorage, "Fragua", ApiSource, "ModuleScript")
+function EnsurePlaceModules.sync(surface: any?)
+	ensureModule(ReplicatedStorage, "Fragua", ApiSource.build(surface or { types = {} }), "ModuleScript")
 	ensureModule(ServerScriptService, "FraguaRuntime", BootstrapSource, "Script")
 	local starterPlayerScripts = StarterPlayer:WaitForChild("StarterPlayerScripts")
 	ensureModule(starterPlayerScripts, "FraguaClientRuntime", ClientBootstrapSource, "LocalScript")

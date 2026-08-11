@@ -25,5 +25,6 @@ TestRunner.run({
 	ScriptUpdateGate = require("./ScriptUpdateGate.spec"),
 	TypeCatalog = require("./TypeCatalog.spec"),
 	RuntimeSources = require("./RuntimeSources.spec"),
+	WrapperPolicy = require("./WrapperPolicy.spec"),
 	ApiSource = require("./ApiSource.spec"),
 })
