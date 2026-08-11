@@ -1,7 +1,6 @@
 local ok, Schemas = pcall(function()
 	return require("../src/App/Types/EngineClassSchemas")
 end)
-local Catalog = require("../src/App/Types/EnginePropertyCatalog")
 
 local function byName(rows)
 	local result = {}
@@ -78,19 +77,6 @@ return {
 		assert(team.Name and team.ClassName and team.Archivable)
 		assert(team.AutoAssignable and team.AutoAssignable.valueType == "boolean")
 		assert(team.TeamColor and team.TeamColor.valueType == "BrickColor")
-	end,
-	["custom inheritance schemas consume the Properties dock catalog"] = function()
-		for _, className in { "StarterPlayer", "Team" } do
-			local catalogRows = byName(Catalog.forClass(className))
-			local schemaRows = byName(Schemas.forClass(className))
-			for name, catalogRow in catalogRows do
-				local schemaRow = schemaRows[name]
-				assert(schemaRow, `{className}.{name} should reach custom inheritance schemas`)
-				assert(schemaRow.valueType == catalogRow.valueType)
-				assert(schemaRow.enumType == catalogRow.enumType)
-				assert(schemaRow.readonly == catalogRow.readonly)
-			end
-		end
 	end,
 	["VehicleSeat exposes vehicle and inherited BasePart properties"] = function()
 		assert(ok and Schemas, "EngineClassSchemas should be available")

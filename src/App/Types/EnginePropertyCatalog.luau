@@ -232,9 +232,9 @@ local INHERITED_FAMILIES = {
 
 local BY_CLASS: { [string]: { EngineProp } } = {
 	Instance = {
-		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Name", category = "Data", valueType = "string", default = "Instance" },
 		{ name = "ClassName", category = "Data", valueType = "string", readonly = true },
-		{ name = "Archivable", category = "Behavior", valueType = "boolean" },
+		{ name = "Archivable", category = "Behavior", valueType = "boolean", default = true },
 	},
 	Workspace = {
 		{ name = "Gravity", category = "World", valueType = "number" },
@@ -342,7 +342,7 @@ local BY_CLASS: { [string]: { EngineProp } } = {
 		{ name = "TeamColor", category = "Data", valueType = "BrickColor", defaultKind = "teamColor" },
 	},
 	Part = {
-		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Name", category = "Data", valueType = "string", default = "Part" },
 		{ name = "Anchored", category = "Behavior", valueType = "boolean" },
 		{ name = "CanCollide", category = "Behavior", valueType = "boolean" },
 		{ name = "CanQuery", category = "Behavior", valueType = "boolean" },
@@ -405,21 +405,21 @@ local BY_CLASS: { [string]: { EngineProp } } = {
 		{ name = "Name", category = "Data", valueType = "string" },
 	},
 	Humanoid = {
-		{ name = "Name", category = "Data", valueType = "string" },
-		{ name = "Health", category = "Health", valueType = "number" },
-		{ name = "MaxHealth", category = "Health", valueType = "number" },
-		{ name = "WalkSpeed", category = "Control", valueType = "number" },
-		{ name = "JumpPower", category = "Control", valueType = "number" },
+		{ name = "Name", category = "Data", valueType = "string", default = "Humanoid" },
+		{ name = "Health", category = "Health", valueType = "number", default = 100 },
+		{ name = "MaxHealth", category = "Health", valueType = "number", default = 100 },
+		{ name = "WalkSpeed", category = "Control", valueType = "number", default = 16 },
+		{ name = "JumpPower", category = "Control", valueType = "number", default = 50 },
 		{ name = "JumpHeight", category = "Control", valueType = "number" },
 		{ name = "HipHeight", category = "Control", valueType = "number" },
 		{ name = "AutoRotate", category = "Control", valueType = "boolean" },
-		{ name = "DisplayName", category = "Display", valueType = "string" },
+		{ name = "DisplayName", category = "Display", valueType = "string", default = "" },
 		{ name = "NameDisplayDistance", category = "Display", valueType = "number" },
 		{ name = "HealthDisplayDistance", category = "Display", valueType = "number" },
 	},
 	Script = {
-		{ name = "Name", category = "Data", valueType = "string" },
-		{ name = "Disabled", category = "Data", valueType = "boolean" },
+		{ name = "Name", category = "Data", valueType = "string", default = "Script" },
+		{ name = "Disabled", category = "Data", valueType = "boolean", default = false },
 		{
 			name = "RunContext",
 			category = "Data",
@@ -434,11 +434,11 @@ local BY_CLASS: { [string]: { EngineProp } } = {
 		},
 	},
 	LocalScript = {
-		{ name = "Name", category = "Data", valueType = "string" },
-		{ name = "Disabled", category = "Data", valueType = "boolean" },
+		{ name = "Name", category = "Data", valueType = "string", default = "LocalScript" },
+		{ name = "Disabled", category = "Data", valueType = "boolean", default = false },
 	},
 	ModuleScript = {
-		{ name = "Name", category = "Data", valueType = "string" },
+		{ name = "Name", category = "Data", valueType = "string", default = "ModuleScript" },
 	},
 	Folder = {
 		{ name = "Name", category = "Data", valueType = "string" },

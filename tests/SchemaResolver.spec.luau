@@ -1,4 +1,5 @@
 local SchemaResolver = require("../src/App/Types/SchemaResolver")
+local EngineSchemas = require("../src/App/Types/EngineSchemas")
 
 local definitions = {
 	Base = {
@@ -44,5 +45,25 @@ return {
 		local result, err = resolve(definitions.A)
 		assert(#result == 0)
 		assert(err.code == "inheritance-cycle")
+	end,
+	["custom Part chains retain canonical metadata and legacy defaults"] = function()
+		local custom = {
+			BasePartType = { id = "BasePartType", extends = "Part", properties = {} },
+			DerivedPartType = { id = "DerivedPartType", extends = "BasePartType", properties = {} },
+		}
+		local result, err = SchemaResolver.resolve(custom.DerivedPartType, function(id)
+			return custom[id]
+		end, EngineSchemas.get)
+		assert(err == nil)
+		local rows = {}
+		for _, property in result do
+			rows[property.name] = property
+		end
+		assert(rows.Material.default == "Plastic")
+		assert(rows.Material.category == "Appearance")
+		assert(rows.Material.enumType == "Material")
+		assert(table.find(rows.Material.enumItems, "Neon"))
+		assert(rows.Anchored.default == false)
+		assert(rows.ClassName.readonly == true)
 	end,
 }
