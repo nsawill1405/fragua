@@ -71,6 +71,55 @@ return {
 		PropertyIdentity.reserve(reopened, childId)
 		assert(PropertyIdentity.allocate(reopened) == "Child:property:3")
 	end,
+	["create parent then child remaps draft ids to unique type scoped identities"] = function()
+		-- same draft-scope policy TypeEditor uses before first save
+		local parentDraft = PropertyIdentity.new(PropertyIdentity.DRAFT_TYPE_ID, {})
+		local parentOwn = {
+			{ id = PropertyIdentity.allocate(parentDraft), name = "Health" },
+			{ id = PropertyIdentity.allocate(parentDraft), name = "Speed" },
+		}
+		assert(parentOwn[1].id == "__FraguaDraft:property:1")
+		assert(parentOwn[2].id == "__FraguaDraft:property:2")
+		local parentIds = PropertyIdentity.persistOwnedIds("Zombie", parentOwn, {}, true)
+		for index, prop in parentOwn do
+			prop.id = parentIds[index]
+		end
+		assert(parentOwn[1].id == "Zombie:property:1")
+		assert(parentOwn[2].id == "Zombie:property:2")
+
+		-- child create also drafts under the shared scope then remaps with inherited reserved
+		local childDraft = PropertyIdentity.new(PropertyIdentity.DRAFT_TYPE_ID, {})
+		local childOwn = {
+			{ id = PropertyIdentity.allocate(childDraft), name = "Armor" },
+			{ id = PropertyIdentity.allocate(childDraft), name = "Damage" },
+		}
+		assert(childOwn[1].id == "__FraguaDraft:property:1")
+		local childIds = PropertyIdentity.persistOwnedIds("BossZombie", childOwn, parentOwn, true)
+		for index, prop in childOwn do
+			prop.id = childIds[index]
+		end
+
+		-- reopen each and add a third prop the way TypeEditor seeds identity
+		local parentEditor = PropertyIdentity.new("Zombie", parentOwn)
+		table.insert(parentOwn, { id = PropertyIdentity.allocate(parentEditor), name = "Faction" })
+		local childEditor = PropertyIdentity.new("BossZombie", childOwn)
+		for _, prop in parentOwn do
+			PropertyIdentity.reserve(childEditor, prop.id)
+		end
+		table.insert(childOwn, { id = PropertyIdentity.allocate(childEditor), name = "Rage" })
+
+		local seen: { [string]: boolean } = {}
+		for _, prop in parentOwn do
+			assert(not seen[prop.id], `duplicate resolved id {prop.id}`)
+			seen[prop.id] = true
+		end
+		for _, prop in childOwn do
+			assert(not seen[prop.id], `duplicate resolved id {prop.id}`)
+			seen[prop.id] = true
+			assert(string.match(prop.id, "^BossZombie:property:%d+$"))
+		end
+		assert(#parentOwn + #childOwn == 6)
+	end,
 	["duplicate inherited identities cannot steal a mixed reference rename"] = function()
 		local reference = Roblox.Instance.new("Folder")
 		local duplicate = "legacy:property:1"
@@ -126,8 +175,12 @@ return {
 			valueType = "FraguaInstance",
 			referenceType = "Zombie",
 		}, function(id)
-			if id == "BossZombie" then return { id = id, extends = "Zombie" } end
-			if id == "Zombie" then return { id = id, extends = "Configuration" } end
+			if id == "BossZombie" then
+				return { id = id, extends = "Zombie" }
+			end
+			if id == "Zombie" then
+				return { id = id, extends = "Configuration" }
+			end
 		end)
 		assert(message == nil)
 	end,

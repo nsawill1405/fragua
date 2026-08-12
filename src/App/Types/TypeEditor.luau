@@ -547,9 +547,17 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 	local categoryOrder: { string } = { "Data" }
 	local propsByCat: { [string]: { PropDraft } } = { Data = {} }
 	local identity = PropertyIdentity.new(
-		if editing then editing.id else "__FraguaDraft",
+		if editing then editing.id else PropertyIdentity.DRAFT_TYPE_ID,
 		if editing then editing.properties else {}
 	)
+	-- reserve inherited ids so new allocates never reuse their :property:N slots
+	if editing then
+		for _, prop in Registry.resolvedSchema(editing) do
+			if prop.inherited and typeof(prop.id) == "string" and prop.id ~= "" then
+				PropertyIdentity.reserve(identity, prop.id)
+			end
+		end
+	end
 
 	local function makeProperty(name: string, valueType: string, category: string, defaultValue: any?): PropDraft
 		return {
@@ -1007,7 +1015,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			end
 		end
 		local draftDefinition = {
-			id = if editing then editing.id else "__FraguaDraft",
+			id = if editing then editing.id else PropertyIdentity.DRAFT_TYPE_ID,
 			name = if editing then editing.name else "Draft",
 			description = "",
 			extends = storeExtends(selectedExtends),
@@ -1288,6 +1296,17 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 					table.insert(properties, property)
 				end
 			end
+		end
+
+		-- remap draft-scoped ids onto the real type id (create always rewrites)
+		local inheritedProps = {}
+		local parent = Registry.get(storeExtends(selectedExtends))
+		if parent then
+			inheritedProps = Registry.resolvedSchema(parent)
+		end
+		local persistedIds = PropertyIdentity.persistOwnedIds(name, properties, inheritedProps, editing == nil)
+		for index, property in properties do
+			property.id = persistedIds[index]
 		end
 
 		local previous = editing
