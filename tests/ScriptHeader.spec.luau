@@ -42,4 +42,11 @@ return {
 		assert(result:sub(1, #directive) == directive)
 		assert(result:find("-- Fragua imports begin", #directive + 1, true) == #directive + 1)
 	end,
+	["preserves --!strict and stays idempotent"] = function()
+		assert(ok and Header, "ScriptHeader should be available")
+		local once = Header.apply("--!strict\nlocal x = 1\n", "Server")
+		local twice, changed = Header.apply(once, "Server")
+		-- plan snippet used sub(1, 8); --!strict is 9 chars
+		assert(once:sub(1, 9) == "--!strict" and not changed and twice == once)
+	end,
 }

@@ -249,16 +249,20 @@ return {
 	end,
 	["FraguaType properties compile with facade item assignment types"] = function()
 		local source = ApiSource.build({
-			types = { {
-				id = "Spawner",
-				backingClass = "Folder",
-				properties = { {
-					name = "Kind",
-					valueType = "enum",
-					enumType = "FraguaType",
-					typeName = "FraguaTypeItem<string>",
-				} },
-			} },
+			types = {
+				{
+					id = "Spawner",
+					backingClass = "Folder",
+					properties = {
+						{
+							name = "Kind",
+							valueType = "enum",
+							enumType = "FraguaType",
+							typeName = "FraguaTypeItem<string>",
+						},
+					},
+				},
+			},
 		})
 		assert(source:find("Kind: FraguaTypeItem<string>", 1, true))
 		local compiled, chunk = pcall(loadstring, source, "FraguaEnumProperty")
