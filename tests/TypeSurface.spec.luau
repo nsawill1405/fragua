@@ -109,4 +109,36 @@ function Behavior.Attack(instance: Instance): () end
 		assert(#surface.types[1].serverMethods == 1)
 		assert(surface.types[1].serverMethods[1].name == "Attack")
 	end,
+	["exposes inherited properties and side-scoped methods"] = function()
+		local surface = fixture()
+		local function findType(items, id)
+			for _, item in items.types do
+				if item.id == id then
+					return item
+				end
+			end
+			return nil
+		end
+		local function findProperty(item, name)
+			for _, property in item.properties do
+				if property.name == name then
+					return property
+				end
+			end
+			return nil
+		end
+		local function findMethod(items, name)
+			for _, method in items do
+				if method.name == name then
+					return method
+				end
+			end
+			return nil
+		end
+		local zombie = assert(findType(surface, "Zombie"))
+		assert(findProperty(zombie, "Transparency"))
+		assert(findProperty(zombie, "Health"))
+		assert(findMethod(zombie.serverMethods, "Attack"))
+		assert(not findMethod(zombie.clientMethods, "Attack"))
+	end,
 }

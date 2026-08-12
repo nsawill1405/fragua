@@ -26,6 +26,11 @@ return {
 		)
 		assert(className == "SpawnLocation" and err == nil)
 	end,
+	["resolves armored zombie inheritance chain"] = function()
+		assert(Resolver.resolve("ArmoredZombie", function(id)
+			return ({ ArmoredZombie = { extends = "Zombie" }, Zombie = { extends = "SpawnLocation" } })[id]
+		end) == "SpawnLocation")
+	end,
 	["reports custom inheritance cycles"] = function()
 		local className, err = Resolver.resolve(
 			"Boss",

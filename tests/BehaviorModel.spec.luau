@@ -17,6 +17,12 @@ return {
 		assert(model.name("Zombie", "Edit") == "ZombieEditBehavior")
 		assert(model.name("Zombie", "Server") == "ZombieServerBehavior")
 		assert(model.name("Zombie", "Client") == "ZombieClientBehavior")
+		local names = {
+			model.name("Zombie", "Edit"),
+			model.name("Zombie", "Server"),
+			model.name("Zombie", "Client"),
+		}
+		assert(names[1] ~= names[2] and names[2] ~= names[3] and names[1] ~= names[3])
 	end,
 	["client skeleton has runtime hooks only"] = function()
 		local source = requireModel().defaultSource("Zombie", "Client")
