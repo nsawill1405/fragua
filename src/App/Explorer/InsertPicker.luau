@@ -501,8 +501,14 @@ function InsertPicker.handleChoice(
 		return
 	end
 	if choice.kind == "custom" then
-		local inst = Registry.createInstance(choice.typeId, parent)
-		afterInsert(inst)
+		local ok, inst = pcall(function()
+			return Registry.createInstance(choice.typeId, parent)
+		end)
+		if ok and inst then
+			afterInsert(inst)
+		else
+			warn("[Fragua] Could not create custom type " .. choice.typeId)
+		end
 	end
 end
 

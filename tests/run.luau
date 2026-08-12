@@ -15,6 +15,8 @@ TestRunner.run({
 	SchemaResolver = require("./SchemaResolver.spec"),
 	TypeEditorLayout = require("./TypeEditorLayout.spec"),
 	InsertFlow = require("./InsertFlow.spec"),
+	InsertPickerSafety = require("./InsertPickerSafety.spec"),
+	HostLifecycle = require("./HostLifecycle.spec"),
 	IconData = require("./IconData.spec"),
 	EnginePropResolver = require("./EnginePropResolver.spec"),
 	EngineClassSchemas = require("./EngineClassSchemas.spec"),
