@@ -12,6 +12,7 @@ local TypeDraft = require(script.Parent.TypeDraft)
 local TypeEditorLayout = require(script.Parent.TypeEditorLayout)
 local TypeValue = require(script.Parent.TypeValue)
 local EnumDefaults = require(script.Parent.EnumDefaults)
+local PropertyIdentity = require(script.Parent.PropertyIdentity)
 
 local TypeEditor = {}
 
@@ -545,12 +546,14 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 	-- drafts: ordered categories + props
 	local categoryOrder: { string } = { "Data" }
 	local propsByCat: { [string]: { PropDraft } } = { Data = {} }
-	local nextPropertyId = 0
+	local identity = PropertyIdentity.new(
+		if editing then editing.id else "__FraguaDraft",
+		if editing then editing.properties else {}
+	)
 
 	local function makeProperty(name: string, valueType: string, category: string, defaultValue: any?): PropDraft
-		nextPropertyId += 1
 		return {
-			id = `property-{nextPropertyId}`,
+			id = PropertyIdentity.allocate(identity),
 			name = name,
 			valueType = valueType,
 			defaultValue = if defaultValue ~= nil then defaultValue else TypeValue.default(valueType),
@@ -559,9 +562,20 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 	end
 
 	local function copyProperty(prop, category: string): PropDraft
-		local copy = makeProperty(prop.name, prop.valueType or "string", category, prop.default)
-		copy.id = prop.id or copy.id
-		copy.originalName = prop.originalName or prop.name
+		local id = prop.id
+		if typeof(id) == "string" and id ~= "" then
+			PropertyIdentity.reserve(identity, id)
+		else
+			id = PropertyIdentity.allocate(identity)
+		end
+		local copy: PropDraft = {
+			id = id,
+			name = prop.name,
+			valueType = prop.valueType or "string",
+			defaultValue = if prop.default ~= nil then prop.default else TypeValue.default(prop.valueType or "string"),
+			category = category,
+			originalName = prop.originalName or prop.name,
+		}
 		for _, field in PROPERTY_METADATA do
 			copy[field] = prop[field]
 		end
@@ -845,8 +859,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 						setValidation(prop.controlError)
 						return
 					end
-					local valid, message = TypeValue.validate(prop.valueType, prop.defaultValue, prop)
-					setValidation(if valid then nil else message)
+					setValidation(DefaultEditor.valueError(prop.defaultValue, prop, Registry.get))
 				end
 				local function mountDefaultEditor()
 					return DefaultEditor.mount(defaultHost, prop, {

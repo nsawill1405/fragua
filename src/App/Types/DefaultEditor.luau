@@ -44,11 +44,15 @@ local function safeList(callback: ((string?) -> { string })?, argument: string?)
 	return if ok then cloneList(result) else {}
 end
 
-function DefaultEditor.referenceError(value: any, prop: any, lookupType): string?
+function DefaultEditor.valueError(value: any, prop: any, lookupType): string?
 	local metadata = table.clone(prop)
 	metadata.lookupType = lookupType
 	local valid, message = TypeValue.validate(prop.valueType, value, metadata)
 	return if valid then nil else message
+end
+
+function DefaultEditor.referenceError(value: any, prop: any, lookupType): string?
+	return DefaultEditor.valueError(value, prop, lookupType)
 end
 
 local function fullName(value: Instance?): string

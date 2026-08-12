@@ -26,6 +26,9 @@ local function propertyType(property, definitionsById): string
 		end
 		return "Instance"
 	end
+	if property.valueType == "enum" and property.enumType == "FraguaType" then
+		return "FraguaTypeItem<string>"
+	end
 	return VALUE_TYPES[property.valueType] or "any"
 end
 
