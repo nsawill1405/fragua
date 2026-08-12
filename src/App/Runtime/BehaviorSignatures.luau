@@ -59,6 +59,7 @@ local PORTABLE_TYPES = {
 	Faces = true,
 	FloatCurveKey = true,
 	Font = true,
+	FraguaTypeItem = true,
 	Instance = true,
 	NumberRange = true,
 	NumberSequence = true,

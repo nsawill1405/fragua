@@ -247,6 +247,23 @@ return {
 		local compiled, chunk = pcall(loadstring, source, "FraguaWithMethods")
 		assert(compiled and chunk, tostring(chunk))
 	end,
+	["FraguaType properties compile with facade item assignment types"] = function()
+		local source = ApiSource.build({
+			types = { {
+				id = "Spawner",
+				backingClass = "Folder",
+				properties = { {
+					name = "Kind",
+					valueType = "enum",
+					enumType = "FraguaType",
+					typeName = "FraguaTypeItem<string>",
+				} },
+			} },
+		})
+		assert(source:find("Kind: FraguaTypeItem<string>", 1, true))
+		local compiled, chunk = pcall(loadstring, source, "FraguaEnumProperty")
+		assert(compiled and chunk, tostring(chunk))
+	end,
 	["native writable properties are not treated as wrapper-owned slots"] = function()
 		local source = buildSource()
 		local newIndex = assert(source:find("WRAPPER_METATABLE.__newindex", 1, true))

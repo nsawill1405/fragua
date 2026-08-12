@@ -3,6 +3,7 @@ local EnumDefaults = require("../src/App/Types/EnumDefaults")
 local PropertyMigration = require("../src/App/Types/PropertyMigration")
 local TypeValue = require("../src/App/Types/TypeValue")
 local DefaultEditor = require("../src/App/Types/DefaultEditor")
+local PropertyIdentity = require("../src/App/Types/PropertyIdentity")
 
 return {
 	["FraguaType is live and enum values select persist read and write"] = function()
@@ -60,6 +61,34 @@ return {
 		assert(migrated.references.Leader == nil and migrated.references.Owner == reference)
 		assert(migrated.attributes.Removed == nil and migrated.attributes.Added == true)
 	end,
+	["editor identities stay unique across inheritance reopen delete and add"] = function()
+		local parent = PropertyIdentity.new("Parent", {})
+		local parentId = PropertyIdentity.allocate(parent)
+		local reopened = PropertyIdentity.new("Child", { { id = parentId }, { id = "Child:property:1" } })
+		local childId = PropertyIdentity.allocate(reopened)
+		assert(parentId == "Parent:property:1")
+		assert(childId == "Child:property:2")
+		PropertyIdentity.reserve(reopened, childId)
+		assert(PropertyIdentity.allocate(reopened) == "Child:property:3")
+	end,
+	["duplicate inherited identities cannot steal a mixed reference rename"] = function()
+		local reference = Roblox.Instance.new("Folder")
+		local duplicate = "legacy:property:1"
+		local migrated = PropertyMigration.apply(
+			{ attributes = { Health = 10 }, references = { Leader = reference } },
+			{
+				{ id = duplicate, name = "Health", valueType = "number" },
+				{ id = duplicate, name = "Leader", valueType = "FraguaInstance" },
+			},
+			{
+				{ id = duplicate, name = "Health", valueType = "number" },
+				{ id = "Child:property:2", originalName = "Leader", name = "Owner", valueType = "FraguaInstance" },
+				{ id = "Child:property:3", name = "Enabled", valueType = "boolean", default = true },
+			}
+		)
+		assert(migrated.attributes.Health == 10 and migrated.attributes.Enabled == true)
+		assert(migrated.references.Owner == reference and migrated.references.Leader == nil)
+	end,
 	["custom reference defaults accept descendants through injected lookup"] = function()
 		local boss = Roblox.Instance.new("Folder")
 		boss:SetAttribute("_FraguaType", "BossZombie")
@@ -89,6 +118,18 @@ return {
 			end
 		end)
 		assert(#errors == 0)
+	end,
+	["mounted row validation seam accepts descendant references"] = function()
+		local boss = Roblox.Instance.new("Folder")
+		boss:SetAttribute("_FraguaType", "BossZombie")
+		local message = DefaultEditor.valueError(boss, {
+			valueType = "FraguaInstance",
+			referenceType = "Zombie",
+		}, function(id)
+			if id == "BossZombie" then return { id = id, extends = "Zombie" } end
+			if id == "Zombie" then return { id = id, extends = "Configuration" } end
+		end)
+		assert(message == nil)
 	end,
 	["BrickColor display snaps to the value that is committed"] = function()
 		local arbitrary = Roblox.Color3.new(0.123, 0.456, 0.789)

@@ -21,6 +21,7 @@ local function fixture()
 			{ name = "Transparency", valueType = "number", origin = "Part", inherited = true },
 			{ name = "Health", valueType = "integer", origin = "Enemy", inherited = true },
 			{ name = "Mood", valueType = "enum", enumType = "HumanoidStateType", origin = "Zombie" },
+			{ name = "Kind", valueType = "enum", enumType = "FraguaType", origin = "Zombie" },
 			{ name = "Leader", valueType = "FraguaInstance", referenceType = "Enemy", origin = "Zombie" },
 			{ name = "Health", valueType = "number", origin = "Zombie" },
 		},
@@ -67,6 +68,7 @@ return {
 		end
 		assert(propertyByName.Health.typeName == "number")
 		assert(propertyByName.Mood.typeName == "EnumItem")
+		assert(propertyByName.Kind.typeName == "FraguaTypeItem<string>")
 		assert(propertyByName.Target == nil)
 		assert(propertyByName.Leader.typeName == "Enemy")
 		assert(propertyByName.Transparency.typeName == "number")

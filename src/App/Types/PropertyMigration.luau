@@ -9,12 +9,19 @@ local function copyMap(source)
 end
 
 local function matches(previous, nextProperties)
-	local byId, byName = {}, {}
+	-- skip ambiguous legacy ids so name/originalName can win across inheritance
+	local byId, byName, idCounts = {}, {}, {}
 	for _, prop in previous do
 		if prop.id then
+			idCounts[prop.id] = (idCounts[prop.id] or 0) + 1
 			byId[prop.id] = prop
 		end
 		byName[prop.name] = prop
+	end
+	for id, count in idCounts do
+		if count > 1 then
+			byId[id] = nil
+		end
 	end
 	local result, used = {}, {}
 	for _, prop in nextProperties do
