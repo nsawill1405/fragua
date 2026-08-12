@@ -138,8 +138,8 @@ function Host.runCreated(instance: Instance)
 	if not RunService:IsEdit() then
 		return
 	end
+	-- watch already fires onCreated once; dont call the hook again
 	watch(instance)
-	callHook(instance, "onCreated")
 end
 
 return Host
