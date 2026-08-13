@@ -2,6 +2,7 @@ local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local Constants = require(script.Parent.Parent.Shared.Constants)
 local Registry = require(script.Parent.Parent.Types.Registry)
+local ScriptHeader = require(script.Parent.Parent.Runtime.ScriptHeader)
 local Util = require(script.Parent.Parent.Shared.Util)
 
 local Host = {}
@@ -35,6 +36,8 @@ local function loadBehavior(instance: Instance)
 	if not source then
 		return nil
 	end
+	-- edit host runs in the plugin; strip managed headers so Instance/Enum stay roblox natives
+	source = ScriptHeader.strip(source)
 	-- loadstring so shared Edit Behavior edits hot-reload in Studio (require caches).
 	local chunk, err = loadstring(source, instance:GetFullName() .. ".EditBehavior")
 	if not chunk then

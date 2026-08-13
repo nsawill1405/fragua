@@ -26,4 +26,13 @@ return {
 		end
 		assert(count == 1, `expected exactly one onCreated callHook, found {count}`)
 	end,
+	["edit host strips managed headers before loadstring"] = function()
+		local source = fs.readFile("src/App/Behaviors/Host.luau")
+		assert(source:find("ScriptHeader.strip", 1, true), "Host should strip managed headers")
+		local loadStart = assert(source:find("local function loadBehavior", 1, true))
+		local loadFinish = assert(source:find("\nlocal function callHook", loadStart, true))
+		local body = source:sub(loadStart, loadFinish - 1)
+		assert(body:find("ScriptHeader.strip(source)", 1, true))
+		assert(body:find("loadstring(source", 1, true))
+	end,
 }

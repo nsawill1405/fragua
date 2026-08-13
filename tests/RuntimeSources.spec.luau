@@ -79,7 +79,9 @@ return {
 		assert(source:find('"FraguaRuntime"', 1, true))
 		assert(source:find('"FraguaClientRuntime"', 1, true))
 		assert(source:find('"StarterPlayerScripts"', 1, true))
-		assert(source:find("Source ~= source", 1, true))
+		-- recreate on source change so roblox require caches cannot keep a stale gateway
+		assert(source:find("Source == source", 1, true))
+		assert(source:find("existing:Destroy()", 1, true))
 	end,
 	["managed gateway sync builds from an optional type surface"] = function()
 		local source = fs.readFile("src/App/Runtime/EnsurePlaceModules.luau")

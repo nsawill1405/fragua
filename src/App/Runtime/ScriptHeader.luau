@@ -5,6 +5,20 @@ local END_MARKER = "-- Fragua imports end"
 
 type Facade = "Server" | "Client" | "Core"
 
+local SKIP_PREFIXES = {
+	"ReplicatedStorage.Fragua",
+	"ReplicatedStorage.FraguaTypes",
+	"ServerScriptService.FraguaRuntime",
+	"StarterPlayer.StarterPlayerScripts.FraguaClientRuntime",
+	"ServerStorage.Fragua",
+	"CoreGui",
+	"CorePackages",
+}
+
+local function underPrefix(fullName: string, prefix: string): boolean
+	return fullName == prefix or fullName:sub(1, #prefix + 1) == prefix .. "."
+end
+
 local function headerFor(facade: Facade): string
 	return table.concat({
 		BEGIN_MARKER,
@@ -60,10 +74,32 @@ function ScriptHeader.apply(source: string, facade: Facade): (string, boolean)
 	return nextSource, nextSource ~= source
 end
 
+function ScriptHeader.strip(source: string): (string, boolean)
+	local startByte = source:find(BEGIN_MARKER, 1, true)
+	if not startByte then
+		return source, false
+	end
+	local endByte = source:find(END_MARKER, startByte + #BEGIN_MARKER, true)
+	if not endByte then
+		return source, false
+	end
+	local blockEnd = endByte + #END_MARKER - 1
+	local before = source:sub(1, startByte - 1)
+	local after = source:sub(blockEnd + 1):gsub("^[\r\n]+", "")
+	local nextSource = before .. after
+	if before ~= "" and not before:match("\n$") and after ~= "" then
+		nextSource = before .. "\n" .. after
+	end
+	return nextSource, nextSource ~= source
+end
+
 function ScriptHeader.shouldSkip(fullName: string): boolean
-	return fullName == "ReplicatedStorage.Fragua"
-		or fullName == "ServerScriptService.FraguaRuntime"
-		or fullName == "StarterPlayer.StarterPlayerScripts.FraguaClientRuntime"
+	for _, prefix in SKIP_PREFIXES do
+		if underPrefix(fullName, prefix) then
+			return true
+		end
+	end
+	return false
 end
 
 ScriptHeader.HEADER = headerFor("Core")
