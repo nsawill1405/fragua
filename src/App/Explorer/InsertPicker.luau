@@ -318,7 +318,11 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 			order += 1
 
 			local customCount = 0
-			for _, def in Registry.list() do
+			local customDefs = table.clone(Registry.list())
+			table.sort(customDefs, function(a, b)
+				return a.name:lower() < b.name:lower()
+			end)
+			for _, def in customDefs do
 				if lower == "" or string.find(string.lower(def.name), lower, 1, true) then
 					local typeId = def.id
 					row({
