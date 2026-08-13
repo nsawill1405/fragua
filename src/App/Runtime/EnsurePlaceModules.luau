@@ -8,24 +8,33 @@ local ClientBootstrapSource = require(script.Parent.ClientBootstrapSource)
 
 local EnsurePlaceModules = {}
 
-local function ensureModule(parent: Instance, name: string, source: string, className: string)
-	local existing = parent:FindFirstChild(name)
-	if existing and existing:IsA(className) then
-		local marker = existing:GetAttribute("_FraguaManaged")
-		if marker == true and (existing :: any).Source ~= source then
-			(existing :: any).Source = source
-		end
-		return existing
-	end
-	if existing then
-		existing:Destroy()
-	end
+local function createManaged(parent: Instance, name: string, source: string, className: string)
 	local inst = Instance.new(className)
 	inst.Name = name;
 	(inst :: any).Source = source
 	inst:SetAttribute("_FraguaManaged", true)
 	inst.Parent = parent
 	return inst
+end
+
+local function ensureModule(parent: Instance, name: string, source: string, className: string)
+	local existing = parent:FindFirstChild(name)
+	if existing and existing:IsA(className) then
+		local marker = existing:GetAttribute("_FraguaManaged")
+		if marker == true then
+			if (existing :: any).Source == source then
+				return existing
+			end
+			-- recreate so require caches pick up the new gateway shape
+			existing:Destroy()
+			return createManaged(parent, name, source, className)
+		end
+		return existing
+	end
+	if existing then
+		existing:Destroy()
+	end
+	return createManaged(parent, name, source, className)
 end
 
 function EnsurePlaceModules.sync(surface: any)

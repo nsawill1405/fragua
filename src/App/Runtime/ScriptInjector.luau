@@ -6,6 +6,26 @@ local ScriptUpdateGate = require(script.Parent.ScriptUpdateGate)
 
 local ScriptInjector = {}
 
+-- only user-owned script roots; never walk CoreGui / engine internals
+local SCAN_ROOTS = {
+	"Workspace",
+	"ServerStorage",
+	"ServerScriptService",
+	"ReplicatedStorage",
+	"StarterGui",
+	"StarterPack",
+	"StarterPlayer",
+}
+
+local function underRoot(fullName: string): boolean
+	for _, root in SCAN_ROOTS do
+		if fullName == root or fullName:sub(1, #root + 1) == root .. "." then
+			return true
+		end
+	end
+	return false
+end
+
 function ScriptInjector.start()
 	local updating = setmetatable({}, { __mode = "k" })
 	local watched = setmetatable({}, { __mode = "k" })
@@ -47,11 +67,12 @@ function ScriptInjector.start()
 		if stopped or updating[container] or not container.Parent then
 			return
 		end
-		watch(container)
-		if ScriptHeader.shouldSkip(container:GetFullName()) then
+		local fullName = container:GetFullName()
+		if not underRoot(fullName) or ScriptHeader.shouldSkip(fullName) then
 			return
 		end
-		local facade = ScriptContext.select(container.ClassName, container:GetFullName())
+		watch(container)
+		local facade = ScriptContext.select(container.ClassName, fullName)
 		local apply = function(source: string): (string, boolean)
 			return ScriptHeader.apply(source, facade)
 		end
@@ -97,9 +118,14 @@ function ScriptInjector.start()
 		end)
 	)
 
-	for _, descendant in game:GetDescendants() do
-		if descendant:IsA("LuaSourceContainer") then
-			schedule(descendant)
+	for _, rootName in SCAN_ROOTS do
+		local root = game:FindFirstChild(rootName)
+		if root then
+			for _, descendant in root:GetDescendants() do
+				if descendant:IsA("LuaSourceContainer") then
+					schedule(descendant)
+				end
+			end
 		end
 	end
 

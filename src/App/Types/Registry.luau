@@ -13,6 +13,7 @@ local EngineSchemas = require(script.Parent.EngineSchemas)
 local PropertyMigration = require(script.Parent.PropertyMigration)
 local SchemaResolver = require(script.Parent.SchemaResolver)
 local TypeValue = require(script.Parent.TypeValue)
+local ScriptHeader = require(script.Parent.Parent.Runtime.ScriptHeader)
 local WrapperPolicy = require(script.Parent.Parent.Runtime.WrapperPolicy)
 
 export type PropDef = {
@@ -931,19 +932,28 @@ function Registry.ensureBehaviorTemplate(typeId: string, side: string): ModuleSc
 	return createBehaviorTemplate(typeId, side, BehaviorModel.defaultSource(typeId, side))
 end
 
+local function sanitizedBehaviorSource(template: ModuleScript): string
+	local stripped, changed = ScriptHeader.strip(template.Source)
+	if changed then
+		-- scrub accidental managed headers off shared templates (edit host uses natives)
+		template.Source = stripped
+	end
+	return stripped
+end
+
 function Registry.getBehaviorSource(typeId: string, side: string): string?
 	BehaviorModel.name(typeId, side)
 	migrateLegacyBehavior(typeId)
 	local template = Registry.canonicalizeBehaviorTemplate(typeId, side)
 	if template then
-		return template.Source
+		return sanitizedBehaviorSource(template)
 	end
 	return nil
 end
 
 function Registry.setBehaviorSource(typeId: string, side: string, source: string)
 	local template = Registry.ensureBehaviorTemplate(typeId, side)
-	template.Source = source
+	template.Source = ScriptHeader.strip(source)
 	if side == "Edit" then
 		-- Notify the edit-time host if present (avoid a hard require cycle).
 		local ok, Host = pcall(function()

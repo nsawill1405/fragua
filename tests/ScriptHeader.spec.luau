@@ -49,4 +49,21 @@ return {
 		-- plan snippet used sub(1, 8); --!strict is 9 chars
 		assert(once:sub(1, 9) == "--!strict" and not changed and twice == once)
 	end,
+	["skips managed fragua folders and coregui"] = function()
+		assert(ok and Header, "ScriptHeader should be available")
+		assert(Header.shouldSkip("ServerStorage.Fragua.Types.ZombieEditBehavior"))
+		assert(Header.shouldSkip("ServerStorage.Fragua.BehaviorBackups.ZombieBehaviorBackup1"))
+		assert(Header.shouldSkip("ReplicatedStorage.FraguaTypes.Zombie.ClientBehavior"))
+		assert(Header.shouldSkip("CoreGui.RobloxGui.Modules.Flags.GetFFlagBetaBadge"))
+		assert(not Header.shouldSkip("ServerStorage.GameModules.Combat"))
+	end,
+	["strips a complete managed header block"] = function()
+		assert(ok and Header, "ScriptHeader should be available")
+		local source = Header.apply("local Behavior = {}\nreturn Behavior\n", "Server")
+		local stripped, changed = Header.strip(source)
+		assert(changed)
+		assert(not stripped:find("-- Fragua imports begin", 1, true))
+		assert(stripped:find("local Behavior = {}", 1, true))
+		assert(stripped:find("return Behavior", 1, true))
+	end,
 }
