@@ -1,5 +1,23 @@
 local TypeEditorLayout = {}
 
+function TypeEditorLayout.measureRows(rowHeights: { number }, gap: number): number
+	local height = 0
+	for index, rowHeight in rowHeights do
+		height += math.max(rowHeight, 0)
+		if index > 1 then
+			height += math.max(gap, 0)
+		end
+	end
+	return height
+end
+
+function TypeEditorLayout.propertyRowHeight(controlHeight: number, hasValidation: boolean): number
+	local headerHeight = 22
+	local controlGap = 4
+	local validationHeight = if hasValidation then 16 else 0
+	return headerHeight + controlGap + math.max(controlHeight, 1) + validationHeight
+end
+
 function TypeEditorLayout.panelSize(hostWidth: number, hostHeight: number)
 	return {
 		width = math.min(math.max(hostWidth - 16, 1), 520),

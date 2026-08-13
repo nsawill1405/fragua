@@ -6,6 +6,7 @@ local Theme = require(script.Parent.Shared.Theme)
 local Util = require(script.Parent.Shared.Util)
 local UiUtil = require(script.Parent.Shared.UiUtil)
 local IconCatalog = require(script.Parent.Types.IconCatalog)
+local BehaviorModel = require(script.Parent.Types.BehaviorModel)
 local Registry = require(script.Parent.Types.Registry)
 local EngineProps = require(script.EngineProps)
 local Controls = require(script.Controls)
@@ -247,51 +248,11 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		end
 
 		if valueType == "boolean" and not readonly then
-			local displayValue = value == true
-			local animationToken = 0
-			local toggle = Instance.new("TextButton")
-			toggle.AutoButtonColor = false
-			toggle.Size = UDim2.fromOffset(36, 18)
-			toggle.Position = UDim2.fromOffset(0, 1)
-			toggle.BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg
-			toggle.BorderSizePixel = 0
-			toggle.Text = ""
-			toggle.Parent = valueParent
-			local tc = Instance.new("UICorner")
-			tc.CornerRadius = UDim.new(1, 0)
-			tc.Parent = toggle
-			local knob = Instance.new("Frame")
-			knob.Size = UDim2.fromOffset(14, 14)
-			knob.Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2)
-			knob.BackgroundColor3 = Theme.textBright
-			knob.BorderSizePixel = 0
-			knob.Parent = toggle
-			local kc = Instance.new("UICorner")
-			kc.CornerRadius = UDim.new(1, 0)
-			kc.Parent = knob
-			toggle.MouseButton1Click:Connect(function()
-				displayValue = not displayValue
-				animationToken += 1
-				local token = animationToken
-				local trackTween = Theme.play(toggle, "boolean-track", {
-					BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg,
-				})
-				Theme.play(knob, "boolean-knob", {
-					Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2),
-				})
-				trackTween.Completed:Once(function()
-					if token ~= animationToken or not toggle.Parent then
-						return
-					end
-					ChangeHistoryService:SetWaypoint("Fragua Property")
-					prop.onCommit(displayValue)
-				end)
+			local _, update = Controls.booleanToggle(valueParent, value == true, function(nextValue)
+				ChangeHistoryService:SetWaypoint("Fragua Property")
+				prop.onCommit(nextValue)
 			end)
-			registerUpdater(function(nextValue)
-				displayValue = nextValue == true
-				toggle.BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg
-				knob.Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2)
-			end)
+			registerUpdater(update)
 			return
 		end
 
@@ -437,6 +398,37 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 						end
 					end,
 				})
+				if typeId then
+					local backingClass, backingErr = Registry.getBackingClass(typeId)
+					if backingClass and current.ClassName ~= backingClass then
+						push("Data", {
+							name = "Backing mismatch",
+							valueType = "string",
+							value = `{current.ClassName} (expected {backingClass})`,
+							readonly = true,
+							onCommit = function() end,
+						})
+						push("Data", {
+							name = "Upgrade backing",
+							valueType = "action",
+							value = `Upgrade to {backingClass}`,
+							onCommit = function()
+								local _, upgradeErr = Registry.upgradeBackingInstance(current)
+								if upgradeErr then
+									warn(`[Fragua] {upgradeErr}`)
+								end
+							end,
+						})
+					elseif backingErr then
+						push("Data", {
+							name = "Backing error",
+							valueType = "string",
+							value = backingErr,
+							readonly = true,
+							onCommit = function() end,
+						})
+					end
+				end
 
 				if def then
 					local seenDirectCategories = {}
@@ -450,45 +442,50 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					for _, prop in Registry.resolvedSchema(def) do
 						if prop.name ~= "Name" and prop.name ~= "Archivable" then
 							schemaNames[prop.name] = true
-							local value = current:GetAttribute(prop.name)
-							if value == nil then
-								value = prop.default
-							end
 							local captured = prop.name
+							local nativeProperty, value = pcall(EngineProps.get, current, captured)
+							if not nativeProperty then
+								value = current:GetAttribute(captured)
+								if value == nil then
+									value = prop.default
+								end
+							end
+							local enumItems = prop.enumItems
+							if nativeProperty and (typeof(value) == "EnumItem" or prop.valueType == "enum") then
+								enumItems = EngineProps.resolveEnumItems(prop, value)
+							end
 							push(prop.category or "Data", {
 								name = prop.name,
 								valueType = prop.valueType,
 								value = value,
 								readonly = prop.readonly == true,
-								enumItems = prop.enumItems,
+								enumItems = enumItems,
+								enumType = prop.enumType,
 								onCommit = function(v)
-									current:SetAttribute(captured, v)
+									if nativeProperty then
+										EngineProps.set(current, captured, v)
+									else
+										current:SetAttribute(captured, v)
+									end
 								end,
 								onPreview = function(v)
-									previewingAttributes[captured] = true
-									current:SetAttribute(captured, v)
-									previewingAttributes[captured] = nil
+									if nativeProperty then
+										previewingProperties[captured] = true
+										EngineProps.set(current, captured, v)
+										previewingProperties[captured] = nil
+									else
+										previewingAttributes[captured] = true
+										current:SetAttribute(captured, v)
+										previewingAttributes[captured] = nil
+									end
 								end,
-								changeKind = "attribute",
+								changeKind = if nativeProperty then "property" else "attribute",
 							})
 						end
 					end
 				end
 
 				if typeId then
-					local behavior = Registry.ensureBehaviorTemplate(typeId)
-					local hooks = {}
-					for hookName in behavior.Source:gmatch("function%s+Behavior%.([%a_][%w_]*)") do
-						table.insert(hooks, hookName)
-					end
-					table.sort(hooks)
-					push("Behavior", {
-						name = "Shared behavior",
-						valueType = "string",
-						value = behavior.Name,
-						readonly = true,
-						onCommit = function() end,
-					})
 					push("Behavior", {
 						name = "Used by",
 						valueType = "string",
@@ -496,28 +493,38 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 						readonly = true,
 						onCommit = function() end,
 					})
-					push("Behavior", {
-						name = "Hooks",
-						valueType = "string",
-						value = if #hooks > 0 then table.concat(hooks, ", ") else "No hooks yet",
-						readonly = true,
-						onCommit = function() end,
-					})
-					push("Behavior", {
-						name = "Code",
-						valueType = "action",
-						value = "Edit behavior",
-						onCommit = function()
-							if opts.onEditScript then
-								opts.onEditScript({
-									target = behavior,
-									title = behavior.Name,
-									typeId = typeId,
-									sharedCount = Registry.countInstances(typeId),
-								})
-							end
-						end,
-					})
+					for _, side in BehaviorModel.SIDES do
+						local capturedSide = side
+						local behavior = Registry.ensureBehaviorTemplate(typeId, capturedSide)
+						local hooks = {}
+						for hookName in behavior.Source:gmatch("function%s+Behavior%.([%a_][%w_]*)") do
+							table.insert(hooks, hookName)
+						end
+						table.sort(hooks)
+						push("Behavior", {
+							name = capturedSide .. " hooks",
+							valueType = "string",
+							value = if #hooks > 0 then table.concat(hooks, ", ") else "No hooks yet",
+							readonly = true,
+							onCommit = function() end,
+						})
+						push("Behavior", {
+							name = capturedSide .. " behavior",
+							valueType = "action",
+							value = `Edit {capturedSide} Behavior`,
+							onCommit = function()
+								if opts.onEditScript then
+									opts.onEditScript({
+										target = behavior,
+										title = behavior.Name,
+										typeId = typeId,
+										side = capturedSide,
+										sharedCount = Registry.countInstances(typeId),
+									})
+								end
+							end,
+						})
+					end
 				end
 			else
 				title.Text = current.Name .. "  /  " .. current.ClassName

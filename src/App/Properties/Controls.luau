@@ -7,6 +7,72 @@ local PreviewCommit = require(script.Parent.Parent.Shared.PreviewCommit)
 
 local Controls = {}
 
+function Controls.booleanToggle(
+	parent: GuiObject,
+	value: boolean,
+	onCommit: (boolean) -> ()
+): (TextButton, (boolean) -> ())
+	local displayValue = value == true
+	local animationToken = 0
+	local toggle = Instance.new("TextButton")
+	toggle.AutoButtonColor = false
+	toggle.Size = UDim2.fromOffset(36, 18)
+	toggle.Position = UDim2.fromOffset(0, 1)
+	toggle.BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg
+	toggle.BorderSizePixel = 0
+	toggle.Text = ""
+	toggle.Parent = parent
+	local tc = Instance.new("UICorner")
+	tc.CornerRadius = UDim.new(1, 0)
+	tc.Parent = toggle
+
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.fromOffset(14, 14)
+	knob.Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2)
+	knob.BackgroundColor3 = Theme.textBright
+	knob.BorderSizePixel = 0
+	knob.Parent = toggle
+	local kc = Instance.new("UICorner")
+	kc.CornerRadius = UDim.new(1, 0)
+	kc.Parent = knob
+
+	local function paint(nextValue: boolean)
+		displayValue = nextValue == true
+		toggle.BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg
+		knob.Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2)
+	end
+
+	toggle.MouseButton1Click:Connect(function()
+		displayValue = not displayValue
+		animationToken += 1
+		local token = animationToken
+		local trackTween = Theme.play(toggle, "boolean-track", {
+			BackgroundColor3 = if displayValue then Theme.accent else Theme.inputBg,
+		})
+		Theme.play(knob, "boolean-knob", {
+			Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2),
+		})
+		trackTween.Completed:Once(function()
+			if token ~= animationToken or not toggle.Parent then
+				return
+			end
+			onCommit(displayValue)
+		end)
+	end)
+
+	return toggle,
+		function(nextValue)
+			animationToken += 1
+			Theme.play(toggle, "boolean-track", {
+				BackgroundColor3 = if nextValue == true then Theme.accent else Theme.inputBg,
+			}, TweenInfo.new(0))
+			Theme.play(knob, "boolean-knob", {
+				Position = if nextValue == true then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2),
+			}, TweenInfo.new(0))
+			paint(nextValue)
+		end
+end
+
 function Controls.enumDropdown(
 	parent: GuiObject,
 	items: { string },
@@ -293,7 +359,8 @@ function Controls.colorField(
 	parent: GuiObject,
 	value: Color3,
 	onCommit: (Color3) -> (),
-	onPreview: ((Color3) -> ())?
+	onPreview: ((Color3) -> ())?,
+	normalize: ((Color3) -> Color3)?
 ): (Frame, (Color3) -> ())
 	local holder = Instance.new("Frame")
 	holder.BackgroundTransparency = 1
@@ -537,6 +604,9 @@ function Controls.colorField(
 
 		local function refresh()
 			working = Color3.fromHSV(h, s, v)
+			if normalize then
+				working = normalize(working)
+			end
 			PreviewCommit.preview(transaction, working)
 			preview.BackgroundColor3 = working
 			sv.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
@@ -622,6 +692,9 @@ function Controls.colorField(
 		local r, g, b = ColorText.parse(hex.Text)
 		if r then
 			local c = Color3.new(r, g :: number, b :: number)
+			if normalize then
+				c = normalize(c)
+			end
 			swatch.BackgroundColor3 = c
 			hex.Text = " " .. ColorText.format(c.R, c.G, c.B)
 			onCommit(c)
