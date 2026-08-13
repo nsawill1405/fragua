@@ -894,10 +894,11 @@ local function migrateLegacyBehavior(typeId: string)
 		return
 	end
 
+	local editSource = BehaviorModel.editSourceFromLegacy(legacy.Source, typeId)
 	local migration = BehaviorTemplatePolicy.legacyMigrationPlan(
-		legacy.Source,
+		editSource,
 		sidedSources,
-		BehaviorModel.serverMigrationSource(typeId),
+		BehaviorModel.serverMigrationSource(typeId, legacy.Source),
 		BehaviorModel.defaultSource(typeId, "Client")
 	)
 
@@ -922,9 +923,23 @@ local function migrateLegacyBehavior(typeId: string)
 	createBehaviorTemplate(typeId, "Client", migration.sources.Client)
 end
 
+local function detachServerEditForwarders(typeId: string)
+	local server = Registry.canonicalizeBehaviorTemplate(typeId, "Server")
+	if not server or not BehaviorModel.isServerEditForwarder(server.Source) then
+		return
+	end
+	local edit = Registry.canonicalizeBehaviorTemplate(typeId, "Edit")
+	local editSource = if edit then edit.Source else ""
+	server.Source = BehaviorModel.serverMigrationSource(typeId, editSource)
+	if edit then
+		edit.Source = BehaviorModel.editSourceFromLegacy(edit.Source, typeId)
+	end
+end
+
 function Registry.ensureBehaviorTemplate(typeId: string, side: string): ModuleScript
 	BehaviorModel.name(typeId, side)
 	migrateLegacyBehavior(typeId)
+	detachServerEditForwarders(typeId)
 	local existing = Registry.canonicalizeBehaviorTemplate(typeId, side)
 	if existing then
 		return existing

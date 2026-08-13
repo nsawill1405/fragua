@@ -17,6 +17,7 @@ TestRunner.run({
 	InsertFlow = require("./InsertFlow.spec"),
 	InsertPickerSafety = require("./InsertPickerSafety.spec"),
 	HostLifecycle = require("./HostLifecycle.spec"),
+	ClassOrder = require("./ClassOrder.spec"),
 	IconData = require("./IconData.spec"),
 	EnginePropResolver = require("./EnginePropResolver.spec"),
 	EngineClassSchemas = require("./EngineClassSchemas.spec"),

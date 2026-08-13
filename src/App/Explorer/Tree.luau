@@ -12,6 +12,7 @@ local SettingsStore = require(script.Parent.Parent.Settings.Store)
 local BehaviorModel = require(script.Parent.Parent.Types.BehaviorModel)
 local IconCatalog = require(script.Parent.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Parent.Types.Registry)
+local ClassOrder = require(script.Parent.ClassOrder)
 local ContextMenu = require(script.Parent.ContextMenu)
 
 local Tree = {}
@@ -92,9 +93,15 @@ local function isHidden(inst: Instance): boolean
 		end
 	end
 	-- hide per-instance Behavior copies (shared template is the source of truth)
-	if inst.Name == Constants.BEHAVIOR_NAME and inst:IsA("ModuleScript") then
+	if inst:IsA("ModuleScript") then
 		local parent = inst.Parent
+		local name = inst.Name
 		if parent and Registry.isFraguaInstance(parent) then
+			if name == Constants.BEHAVIOR_NAME or string.sub(name, -8) == "Behavior" then
+				return true
+			end
+		end
+		if inst:GetAttribute("_FraguaBehaviorSide") == "Edit" then
 			return true
 		end
 	end
@@ -1060,9 +1067,7 @@ function Tree.mount(
 			return
 		end
 		local children = instance:GetChildren()
-		table.sort(children, function(a, b)
-			return a.Name:lower() < b.Name:lower()
-		end)
+		table.sort(children, ClassOrder.compare)
 		local visibleChildren = {}
 		for _, child in children do
 			if not isHidden(child) and matchesFilter(child, filter) then
@@ -1246,6 +1251,9 @@ function Tree.mount(
 			if input.KeyCode == Enum.KeyCode.F2 then
 				renameSelected()
 			elseif input.KeyCode == Enum.KeyCode.Delete or input.KeyCode == Enum.KeyCode.Backspace then
+				deleteSelected()
+			elseif input.KeyCode == Enum.KeyCode.D and shiftDown() and not modDown() then
+				-- shift+d delete (mac-friendly; delete/backspace still work)
 				deleteSelected()
 			elseif input.KeyCode == Enum.KeyCode.D and modDown() then
 				duplicateSelected()
