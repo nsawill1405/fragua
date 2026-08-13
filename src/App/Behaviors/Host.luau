@@ -113,6 +113,11 @@ function Host.start()
 		return
 	end
 	Registry.ensureRoot()
+	-- rewrite any server templates that still require Edit Behavior at play time
+	for _, def in Registry.list() do
+		Registry.ensureBehaviorTemplate(def.id, "Server")
+		Registry.ensureBehaviorTemplate(def.id, "Edit")
+	end
 
 	for _, inst in CollectionService:GetTagged(Constants.TAG) do
 		watch(inst)
