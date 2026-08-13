@@ -1,4 +1,4 @@
--- Curated property schemas + insertable class categories.
+-- Canonical engine schemas + insertable class categories.
 
 export type PropDef = {
 	name: string,
@@ -7,54 +7,22 @@ export type PropDef = {
 	category: string,
 	readonly: boolean?,
 	enumItems: { string }?,
+	enumType: string?,
 }
 
-local function props(list: { PropDef }): { PropDef }
-	return list
-end
-
-local EngineClassSchemas = require(script.Parent.EngineClassSchemas)
-
-local INSTANCE_PROPS = props({
-	{ name = "Name", valueType = "string", default = "Instance", category = "Data" },
-	{ name = "Archivable", valueType = "boolean", default = true, category = "Data" },
-})
+local EngineClassSchemas = if script then require(script.Parent.EngineClassSchemas) else require("./EngineClassSchemas")
 
 local MATERIALS = EngineClassSchemas.materials()
 
-local SCHEMAS: { [string]: { PropDef } } = {
-	Instance = INSTANCE_PROPS,
-	Folder = INSTANCE_PROPS,
-	Configuration = INSTANCE_PROPS,
-	Part = props({
-		{ name = "Name", valueType = "string", default = "Part", category = "Data" },
-		{ name = "Anchored", valueType = "boolean", default = false, category = "Behavior" },
-		{ name = "CanCollide", valueType = "boolean", default = true, category = "Behavior" },
-		{ name = "Transparency", valueType = "number", default = 0, category = "Appearance" },
-		{ name = "Color", valueType = "Color3", default = Color3.fromRGB(163, 162, 165), category = "Appearance" },
-		{ name = "Material", valueType = "enum", default = "Plastic", category = "Appearance", enumItems = MATERIALS },
-		{ name = "Size", valueType = "Vector3", default = Vector3.new(4, 1, 2), category = "Transform" },
-		{ name = "Position", valueType = "Vector3", default = Vector3.zero, category = "Transform" },
-	}),
-	Humanoid = props({
-		{ name = "Name", valueType = "string", default = "Humanoid", category = "Data" },
-		{ name = "Health", valueType = "number", default = 100, category = "Health" },
-		{ name = "MaxHealth", valueType = "number", default = 100, category = "Health" },
-		{ name = "WalkSpeed", valueType = "number", default = 16, category = "Control" },
-		{ name = "JumpPower", valueType = "number", default = 50, category = "Control" },
-		{ name = "DisplayName", valueType = "string", default = "", category = "Display" },
-	}),
-	Script = props({
-		{ name = "Name", valueType = "string", default = "Script", category = "Data" },
-		{ name = "Disabled", valueType = "boolean", default = false, category = "Data" },
-	}),
-	LocalScript = props({
-		{ name = "Name", valueType = "string", default = "LocalScript", category = "Data" },
-		{ name = "Disabled", valueType = "boolean", default = false, category = "Data" },
-	}),
-	ModuleScript = props({
-		{ name = "Name", valueType = "string", default = "ModuleScript", category = "Data" },
-	}),
+local BASE_CLASSES = {
+	"Configuration",
+	"Folder",
+	"Humanoid",
+	"Instance",
+	"LocalScript",
+	"ModuleScript",
+	"Part",
+	"Script",
 }
 
 export type InsertSection = {
@@ -264,24 +232,7 @@ local INSERT_SECTIONS: { InsertSection } = {
 local EngineSchemas = {}
 
 function EngineSchemas.get(className: string): { PropDef }
-	local rows = {}
-	local indexes = {}
-	local function merge(layer)
-		for _, property in layer do
-			local copy = table.clone(property)
-			local existing = indexes[property.name]
-			if existing then
-				rows[existing] = copy
-			else
-				table.insert(rows, copy)
-				indexes[property.name] = #rows
-			end
-		end
-	end
-	merge(INSTANCE_PROPS)
-	merge(EngineClassSchemas.forClass(className))
-	merge(SCHEMAS[className] or {})
-	return rows
+	return EngineClassSchemas.forClass(className)
 end
 
 function EngineSchemas.insertable(): { string }
@@ -303,16 +254,32 @@ function EngineSchemas.insertSections(): { InsertSection }
 end
 
 function EngineSchemas.has(className: string): boolean
-	return SCHEMAS[className] ~= nil or EngineClassSchemas.has(className)
+	return EngineClassSchemas.has(className)
+end
+
+function EngineSchemas.classNames(): { string }
+	local known = {}
+	for _, className in EngineClassSchemas.classNames() do
+		known[className] = true
+	end
+	for _, className in BASE_CLASSES do
+		known[className] = true
+	end
+	for _, section in INSERT_SECTIONS do
+		for _, className in section.classes do
+			known[className] = true
+		end
+	end
+	local names = {}
+	for className in known do
+		table.insert(names, className)
+	end
+	table.sort(names)
+	return names
 end
 
 function EngineSchemas.baseClasses(): { string }
-	local list = {}
-	for name in SCHEMAS do
-		table.insert(list, name)
-	end
-	table.sort(list)
-	return list
+	return table.clone(BASE_CLASSES)
 end
 
 function EngineSchemas.materials(): { string }

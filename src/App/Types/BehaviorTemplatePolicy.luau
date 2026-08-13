@@ -43,4 +43,45 @@ function BehaviorTemplatePolicy.backupFolderName(existing: { [string]: string })
 	return candidate
 end
 
+function BehaviorTemplatePolicy.backupName(existing: { [string]: any }, typeId: string): string
+	local base = typeId .. "BehaviorBackup"
+	local suffix = 1
+	local candidate = base .. tostring(suffix)
+	while existing[candidate] do
+		suffix += 1
+		candidate = base .. tostring(suffix)
+	end
+	return candidate
+end
+
+function BehaviorTemplatePolicy.legacyMigrationPlan(
+	legacySource: string,
+	existingSources: { [string]: string },
+	serverSource: string,
+	clientSource: string
+)
+	local sources = {
+		Edit = legacySource,
+		Server = serverSource,
+		Client = clientSource,
+	}
+	local backup = {}
+	local discard = {}
+	for _, side in { "Edit", "Server", "Client" } do
+		local existing = existingSources[side]
+		if existing ~= nil then
+			if existing == sources[side] then
+				table.insert(discard, side)
+			else
+				table.insert(backup, side)
+			end
+		end
+	end
+	return {
+		sources = sources,
+		backup = backup,
+		discard = discard,
+	}
+end
+
 return BehaviorTemplatePolicy

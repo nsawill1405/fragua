@@ -1,24 +1,77 @@
+local Selection = game:GetService("Selection")
+
 local Theme = require(script.Parent.Parent.Shared.Theme)
 local UiUtil = require(script.Parent.Parent.Shared.UiUtil)
-local Util = require(script.Parent.Parent.Shared.Util)
+local DefaultControlModel = require(script.Parent.DefaultControlModel)
+local DefaultEditor = require(script.Parent.DefaultEditor)
 local EngineSchemas = require(script.Parent.EngineSchemas)
 local IconCatalog = require(script.Parent.IconCatalog)
 local IconPicker = require(script.Parent.IconPicker)
 local Registry = require(script.Parent.Registry)
 local TypeDraft = require(script.Parent.TypeDraft)
 local TypeEditorLayout = require(script.Parent.TypeEditorLayout)
+local TypeValue = require(script.Parent.TypeValue)
+local EnumDefaults = require(script.Parent.EnumDefaults)
+local PropertyIdentity = require(script.Parent.PropertyIdentity)
 
 local TypeEditor = {}
 
 local NONE_LABEL = "None"
-local VALUE_TYPES = { "string", "number", "boolean", "Color3", "Vector3" }
+local VALUE_TYPES = TypeValue.supported()
 
 type PropDraft = {
+	id: string,
+	originalName: string?,
 	name: string,
 	valueType: string,
-	defaultText: string,
+	defaultValue: any,
 	category: string,
+	enumItems: { string }?,
+	enumType: string?,
+	minimum: number?,
+	maximum: number?,
+	step: number?,
+	multiline: boolean?,
+	referenceType: string?,
+	controlError: string?,
 }
+
+local PROPERTY_METADATA = {
+	"enumType",
+	"minimum",
+	"maximum",
+	"step",
+	"multiline",
+	"referenceType",
+}
+
+local function enumNames(): { string }
+	local names = {}
+	for _, enumType in Enum:GetEnums() do
+		table.insert(names, enumType.Name)
+	end
+	return EnumDefaults.names(names, Registry.list())
+end
+
+local function enumItems(enumTypeName: string?): { string }
+	if not enumTypeName then
+		return {}
+	end
+	if enumTypeName == "FraguaType" then
+		return EnumDefaults.items(enumTypeName, Registry.list())
+	end
+	local ok, enumType = pcall(function()
+		return (Enum :: any)[enumTypeName]
+	end)
+	if not ok or not enumType then
+		return {}
+	end
+	local items = {}
+	for _, item in enumType:GetEnumItems() do
+		table.insert(items, item.Name)
+	end
+	return items
+end
 
 local function extendsChoices(excludeId: string?): { string }
 	local items = { NONE_LABEL }
@@ -493,6 +546,50 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 	-- drafts: ordered categories + props
 	local categoryOrder: { string } = { "Data" }
 	local propsByCat: { [string]: { PropDraft } } = { Data = {} }
+	local identity = PropertyIdentity.new(
+		if editing then editing.id else PropertyIdentity.DRAFT_TYPE_ID,
+		if editing then editing.properties else {}
+	)
+	-- reserve inherited ids so new allocates never reuse their :property:N slots
+	if editing then
+		for _, prop in Registry.resolvedSchema(editing) do
+			if prop.inherited and typeof(prop.id) == "string" and prop.id ~= "" then
+				PropertyIdentity.reserve(identity, prop.id)
+			end
+		end
+	end
+
+	local function makeProperty(name: string, valueType: string, category: string, defaultValue: any?): PropDraft
+		return {
+			id = PropertyIdentity.allocate(identity),
+			name = name,
+			valueType = valueType,
+			defaultValue = if defaultValue ~= nil then defaultValue else TypeValue.default(valueType),
+			category = category,
+		}
+	end
+
+	local function copyProperty(prop, category: string): PropDraft
+		local id = prop.id
+		if typeof(id) == "string" and id ~= "" then
+			PropertyIdentity.reserve(identity, id)
+		else
+			id = PropertyIdentity.allocate(identity)
+		end
+		local copy: PropDraft = {
+			id = id,
+			name = prop.name,
+			valueType = prop.valueType or "string",
+			defaultValue = if prop.default ~= nil then prop.default else TypeValue.default(prop.valueType or "string"),
+			category = category,
+			originalName = prop.originalName or prop.name,
+		}
+		for _, field in PROPERTY_METADATA do
+			copy[field] = prop[field]
+		end
+		copy.enumItems = if prop.enumItems then table.clone(prop.enumItems) else nil
+		return copy
+	end
 
 	local function ensureCategory(name: string)
 		if not propsByCat[name] then
@@ -505,24 +602,28 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 		for _, prop in editing.properties do
 			local cat = prop.category or "Data"
 			ensureCategory(cat)
-			table.insert(propsByCat[cat], {
-				name = prop.name,
-				valueType = prop.valueType or "string",
-				defaultText = defaultTextFor(prop.default, prop.valueType or "string"),
-				category = cat,
-			})
+			table.insert(propsByCat[cat], copyProperty(prop, cat))
 		end
 		if #editing.properties == 0 then
 			ensureCategory("Data")
 		end
 	else
 		propsByCat.Data = {
-			{ name = "IsHostile", valueType = "boolean", defaultText = "true", category = "Data" },
-			{ name = "DetectRange", valueType = "number", defaultText = "40", category = "Data" },
+			makeProperty("IsHostile", "boolean", "Data", true),
+			makeProperty("DetectRange", "number", "Data", 40),
 		}
 	end
 
+	local mountedEditors = {}
+	local rowValidationSetters: { [PropDraft]: (string?) -> () } = {}
+
 	rebuildProps = function()
+		local canvasPosition = propsScroll.CanvasPosition
+		for _, editor in mountedEditors do
+			editor.destroy()
+		end
+		table.clear(mountedEditors)
+		table.clear(rowValidationSetters)
 		for _, child in propsScroll:GetChildren() do
 			if child:GetAttribute("_FraguaTypeEditorSection") == true then
 				child:Destroy()
@@ -643,12 +744,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			addProp.ZIndex = 65
 			addProp.Parent = header
 			addProp.MouseButton1Click:Connect(function()
-				table.insert(propsByCat[capturedCat], {
-					name = "NewProp",
-					valueType = "string",
-					defaultText = "",
-					category = capturedCat,
-				})
+				table.insert(propsByCat[capturedCat], makeProperty("NewProp", "string", capturedCat, ""))
 				rebuildProps()
 			end)
 
@@ -678,9 +774,10 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			end)
 
 			for pi, prop in props do
+				local descriptor = DefaultControlModel.describe(prop)
 				local row = Instance.new("Frame")
 				row.BackgroundTransparency = 1
-				row.Size = UDim2.new(1, 0, 0, 24)
+				row.Size = UDim2.new(1, 0, 0, TypeEditorLayout.propertyRowHeight(descriptor.height, false))
 				row.LayoutOrder = pi
 				row.ZIndex = 64
 				row.Parent = sectionContent
@@ -689,7 +786,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 				nameField.ClearTextOnFocus = false
 				nameField.BackgroundColor3 = Theme.inputBg
 				nameField.BorderSizePixel = 0
-				nameField.Size = UDim2.new(0.34, -4, 0, 22)
+				nameField.Size = UDim2.new(0.58, -4, 0, 22)
 				nameField.Font = Theme.font
 				nameField.TextSize = 12
 				nameField.TextColor3 = Theme.textBright
@@ -704,13 +801,12 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 					nameField.Text = prop.name
 				end)
 
-				local defField: TextBox
 				local typeBtn = Instance.new("TextButton")
 				typeBtn.AutoButtonColor = false
 				typeBtn.BackgroundColor3 = Theme.inputBg
 				typeBtn.BorderSizePixel = 0
-				typeBtn.Position = UDim2.new(0.34, 2, 0, 0)
-				typeBtn.Size = UDim2.new(0.22, -4, 0, 22)
+				typeBtn.Position = UDim2.new(0.58, 2, 0, 0)
+				typeBtn.Size = UDim2.new(0.42, -26, 0, 22)
 				typeBtn.Font = Theme.font
 				typeBtn.TextSize = 11
 				typeBtn.TextColor3 = Theme.accent
@@ -720,6 +816,95 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 				local tfc = Instance.new("UICorner")
 				tfc.CornerRadius = UDim.new(0, 4)
 				tfc.Parent = typeBtn
+
+				local del = Instance.new("TextButton")
+				del.AutoButtonColor = false
+				del.BackgroundTransparency = 1
+				del.AnchorPoint = Vector2.new(1, 0)
+				del.Position = UDim2.fromScale(1, 0)
+				del.Size = UDim2.fromOffset(20, 22)
+				del.Font = Enum.Font.SourceSansBold
+				del.TextSize = 14
+				del.Text = "x"
+				del.TextColor3 = Theme.textMuted
+				del.ZIndex = 65
+				del.Parent = row
+
+				local defaultHost = Instance.new("Frame")
+				defaultHost.Name = "DefaultHost"
+				defaultHost.BackgroundTransparency = 1
+				defaultHost.BorderSizePixel = 0
+				defaultHost.Position = UDim2.fromOffset(0, 26)
+				defaultHost.Size = UDim2.new(1, 0, 0, descriptor.height)
+				defaultHost.ZIndex = 65
+				defaultHost.Parent = row
+
+				local validation = Instance.new("TextLabel")
+				validation.BackgroundTransparency = 1
+				validation.Position = UDim2.fromOffset(2, 26 + descriptor.height)
+				validation.Size = UDim2.new(1, -4, 0, 14)
+				validation.Font = Theme.font
+				validation.TextSize = 10
+				validation.TextXAlignment = Enum.TextXAlignment.Left
+				validation.TextColor3 = Theme.danger
+				validation.TextTruncate = Enum.TextTruncate.AtEnd
+				validation.Text = ""
+				validation.Visible = false
+				validation.ZIndex = 65
+				validation.Parent = row
+				local function setValidation(message: string?)
+					validation.Text = message or ""
+					validation.Visible = message ~= nil and message ~= ""
+					row.Size =
+						UDim2.new(1, 0, 0, TypeEditorLayout.propertyRowHeight(descriptor.height, validation.Visible))
+					task.defer(resizeSection)
+				end
+				rowValidationSetters[prop] = setValidation
+
+				local editor
+				local function validateDefault()
+					if prop.controlError then
+						setValidation(prop.controlError)
+						return
+					end
+					setValidation(DefaultEditor.valueError(prop.defaultValue, prop, Registry.get))
+				end
+				local function mountDefaultEditor()
+					return DefaultEditor.mount(defaultHost, prop, {
+						host = overlay,
+						getEnumNames = enumNames,
+						getEnumItems = enumItems,
+						getSelection = function()
+							return Selection:Get()
+						end,
+						getReferenceType = Registry.getTypeId,
+						lookupType = Registry.get,
+						setSelection = function(items)
+							Selection:Set(items)
+						end,
+						onError = function(message)
+							prop.controlError = message
+							setValidation(message)
+						end,
+						onChanged = function(nextValue, metadata)
+							prop.controlError = nil
+							prop.defaultValue = nextValue
+							if typeof(metadata) == "table" then
+								for field, value in metadata do
+									prop[field] = if field == "enumItems" and typeof(value) == "table"
+										then table.clone(value)
+										else value
+								end
+							end
+							validateDefault()
+						end,
+					})
+				end
+
+				editor = mountDefaultEditor()
+				table.insert(mountedEditors, editor)
+				validateDefault()
+
 				typeBtn.MouseButton1Click:Connect(function()
 					local existing = panel:FindFirstChild("ValueTypeMenu")
 					if existing then
@@ -750,7 +935,7 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 					pad.PaddingLeft = UDim.new(0, 4)
 					pad.PaddingRight = UDim.new(0, 4)
 					pad.Parent = drop
-					UiUtil.placeDropdown(panel, typeBtn, drop, math.max(110, typeBtn.AbsoluteSize.X), 140)
+					UiUtil.placeDropdown(panel, typeBtn, drop, math.max(110, typeBtn.AbsoluteSize.X), 220)
 					for i, vt in VALUE_TYPES do
 						local opt = Instance.new("TextButton")
 						opt.AutoButtonColor = false
@@ -767,48 +952,31 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 						opt.ZIndex = 96
 						opt.Parent = drop
 						opt.MouseButton1Click:Connect(function()
+							if vt == prop.valueType then
+								drop:Destroy()
+								return
+							end
+							local oldEditor = editor
+							oldEditor.destroy()
 							prop.valueType = vt
 							typeBtn.Text = vt .. " v"
-							prop.defaultText = defaultTextFor(nil, vt)
-							defField.Text = prop.defaultText
+							prop.enumItems = nil
+							prop.controlError = nil
+							for _, field in PROPERTY_METADATA do
+								prop[field] = nil
+							end
+							prop.defaultValue = TypeValue.default(vt, prop)
+							descriptor = DefaultControlModel.describe(prop)
+							defaultHost.Size = UDim2.new(1, 0, 0, descriptor.height)
+							validation.Position = UDim2.fromOffset(2, 26 + descriptor.height)
+							setValidation(nil)
+							editor = mountDefaultEditor()
+							table.insert(mountedEditors, editor)
+							validateDefault()
 							drop:Destroy()
 						end)
 					end
 				end)
-
-				defField = Instance.new("TextBox")
-				defField.ClearTextOnFocus = false
-				defField.BackgroundColor3 = Theme.inputBg
-				defField.BorderSizePixel = 0
-				defField.Position = UDim2.new(0.56, 2, 0, 0)
-				defField.Size = UDim2.new(0.36, -24, 0, 22)
-				defField.Font = Theme.fontMono
-				defField.TextSize = 11
-				defField.TextColor3 = Theme.textBright
-				defField.Text = prop.defaultText
-				defField.PlaceholderText = "default"
-				defField.PlaceholderColor3 = Theme.textMuted
-				defField.ZIndex = 65
-				defField.Parent = row
-				local dfc = Instance.new("UICorner")
-				dfc.CornerRadius = UDim.new(0, 4)
-				dfc.Parent = defField
-				defField.FocusLost:Connect(function()
-					prop.defaultText = defField.Text
-				end)
-
-				local del = Instance.new("TextButton")
-				del.AutoButtonColor = false
-				del.BackgroundTransparency = 1
-				del.AnchorPoint = Vector2.new(1, 0)
-				del.Position = UDim2.fromScale(1, 0)
-				del.Size = UDim2.fromOffset(20, 24)
-				del.Font = Enum.Font.SourceSansBold
-				del.TextSize = 14
-				del.Text = "x"
-				del.TextColor3 = Theme.textMuted
-				del.ZIndex = 65
-				del.Parent = row
 				del.MouseButton1Click:Connect(function()
 					local currentList = propsByCat[capturedCat]
 					local propIndex = currentList and table.find(currentList, prop)
@@ -831,16 +999,23 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 		local directProperties = {}
 		for _, catName in categoryOrder do
 			for _, property in propsByCat[catName] or {} do
-				table.insert(directProperties, {
+				local direct = {
+					id = property.id,
+					originalName = property.originalName,
 					name = property.name,
 					valueType = property.valueType,
-					default = property.defaultText,
+					default = property.defaultValue,
 					category = catName,
-				})
+					enumItems = if property.enumItems then table.clone(property.enumItems) else nil,
+				}
+				for _, field in PROPERTY_METADATA do
+					direct[field] = property[field]
+				end
+				table.insert(directProperties, direct)
 			end
 		end
 		local draftDefinition = {
-			id = if editing then editing.id else "__FraguaDraft",
+			id = if editing then editing.id else PropertyIdentity.DRAFT_TYPE_ID,
 			name = if editing then editing.name else "Draft",
 			description = "",
 			extends = storeExtends(selectedExtends),
@@ -943,6 +1118,12 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			task.defer(resizeInherited)
 			order += 1
 		end
+
+		task.defer(function()
+			if propsScroll.Parent then
+				propsScroll.CanvasPosition = canvasPosition
+			end
+		end)
 	end
 
 	rebuildProps()
@@ -958,7 +1139,8 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 			n += 1
 			name = base .. tostring(n)
 		end
-		ensureCategory(name)
+		propsByCat[name] = {}
+		table.insert(categoryOrder, 1, name)
 		rebuildProps()
 	end)
 
@@ -1033,23 +1215,58 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 		end
 
 		local validationDraft = TypeDraft.new(name, storeExtends(selectedExtends))
+		local draftProperties = {}
+		for _, setValidation in rowValidationSetters do
+			setValidation(nil)
+		end
+		for _, catName in categoryOrder do
+			for _, prop in propsByCat[catName] or {} do
+				if prop.controlError then
+					local setValidation = rowValidationSetters[prop]
+					if setValidation then
+						setValidation(prop.controlError)
+					end
+					errorLabel.Text = prop.controlError
+					return
+				end
+			end
+		end
 		for _, catName in categoryOrder do
 			local categoryId = TypeDraft.addCategory(validationDraft, catName)
 			for _, prop in propsByCat[catName] or {} do
-				TypeDraft.addProperty(
+				local propertyId = TypeDraft.addProperty(
 					validationDraft,
 					categoryId,
 					string.gsub(prop.name, "^%s*(.-)%s*$", "%1"),
 					prop.valueType,
-					prop.defaultText or ""
+					prop.defaultValue
 				)
+				draftProperties[propertyId] = prop
+				local metadata = {}
+				for _, field in PROPERTY_METADATA do
+					if prop[field] ~= nil then
+						metadata[field] = prop[field]
+					end
+				end
+				if prop.enumItems then
+					metadata.enumItems = table.clone(prop.enumItems)
+				end
+				TypeDraft.updateProperty(validationDraft, propertyId, metadata)
 			end
 		end
 		local validationErrors = TypeDraft.validate(validationDraft, Registry.get)
 		if #validationErrors > 0 then
+			for _, validationError in validationErrors do
+				local property = draftProperties[validationError.fieldId]
+				local setValidation = property and rowValidationSetters[property]
+				if setValidation then
+					setValidation(validationError.message)
+				end
+			end
 			errorLabel.Text = validationErrors[1].message
 			return
 		end
+		errorLabel.Text = ""
 
 		local properties = {}
 		for _, catName in categoryOrder do
@@ -1064,19 +1281,32 @@ function TypeEditor.open(host: Instance, onSaved: ((string) -> (boolean?, string
 						errorLabel.Text = "Bad property name: " .. pname
 						return
 					end
-					local ok, value = Util.parseValue(prop.valueType, prop.defaultText or "")
-					if not ok then
-						errorLabel.Text = "Bad default for " .. pname
-						return
-					end
-					table.insert(properties, {
+					local property = {
+						id = prop.id,
+						originalName = prop.originalName,
 						name = pname,
 						valueType = prop.valueType,
-						default = value,
+						default = prop.defaultValue,
 						category = catName,
-					})
+						enumItems = if prop.enumItems then table.clone(prop.enumItems) else nil,
+					}
+					for _, field in PROPERTY_METADATA do
+						property[field] = prop[field]
+					end
+					table.insert(properties, property)
 				end
 			end
+		end
+
+		-- remap draft-scoped ids onto the real type id (create always rewrites)
+		local inheritedProps = {}
+		local parent = Registry.get(storeExtends(selectedExtends))
+		if parent then
+			inheritedProps = Registry.resolvedSchema(parent)
+		end
+		local persistedIds = PropertyIdentity.persistOwnedIds(name, properties, inheritedProps, editing == nil)
+		for index, property in properties do
+			property.id = persistedIds[index]
 		end
 
 		local previous = editing

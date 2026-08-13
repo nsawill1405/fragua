@@ -1,17 +1,18 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local StarterPlayer = game:GetService("StarterPlayer")
 
 local ApiSource = require(script.Parent.ApiSource)
 local BootstrapSource = require(script.Parent.BootstrapSource)
+local ClientBootstrapSource = require(script.Parent.ClientBootstrapSource)
 
 local EnsurePlaceModules = {}
 
 local function ensureModule(parent: Instance, name: string, source: string, className: string)
 	local existing = parent:FindFirstChild(name)
 	if existing and existing:IsA(className) then
-		-- Keep user edits if marker present and version matches; otherwise refresh API surface
 		local marker = existing:GetAttribute("_FraguaManaged")
-		if marker == true then
+		if marker == true and (existing :: any).Source ~= source then
 			(existing :: any).Source = source
 		end
 		return existing
@@ -27,9 +28,12 @@ local function ensureModule(parent: Instance, name: string, source: string, clas
 	return inst
 end
 
-function EnsurePlaceModules.sync()
-	ensureModule(ReplicatedStorage, "Fragua", ApiSource, "ModuleScript")
+function EnsurePlaceModules.sync(surface: any)
+	assert(surface ~= nil, "type surface required")
+	ensureModule(ReplicatedStorage, "Fragua", ApiSource.build(surface or { types = {} }), "ModuleScript")
 	ensureModule(ServerScriptService, "FraguaRuntime", BootstrapSource, "Script")
+	local starterPlayerScripts = StarterPlayer:WaitForChild("StarterPlayerScripts")
+	ensureModule(starterPlayerScripts, "FraguaClientRuntime", ClientBootstrapSource, "LocalScript")
 end
 
 return EnsurePlaceModules

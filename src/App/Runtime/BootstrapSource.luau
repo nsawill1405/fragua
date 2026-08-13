@@ -1,79 +1,90 @@
 -- Source string for ServerScriptService.FraguaRuntime
--- use [=[ ]=] so nested ]] in comments dont close the string early
 return [=[
--- Fragua play-mode behavior bootstrap (onStart / onStop)
+-- Fragua server play-mode behavior host
 local CollectionService = game:GetService("CollectionService")
 local ServerStorage = game:GetService("ServerStorage")
 
 local TAG = "FraguaInstance"
 local TYPE_ATTR = "_FraguaType"
-local BEHAVIOR_NAME = "Behavior"
+local SIDE = "Server"
+local TEMPLATE_SUFFIX = "ServerBehavior"
 
-local started: { [Instance]: any } = {}
+local started: { [Instance]: { typeId: string, behavior: any? } } = {}
 
-local function syncFromShared(instance: Instance)
-	local typeId = instance:GetAttribute(TYPE_ATTR)
-	if typeof(typeId) ~= "string" then
-		return
-	end
-	local root = ServerStorage:FindFirstChild("Fragua")
-	local types = root and root:FindFirstChild("Types")
-	local shared = types and types:FindFirstChild(typeId .. "Behavior")
-	local behavior = instance:FindFirstChild(BEHAVIOR_NAME)
-	if shared and shared:IsA("ModuleScript") and behavior and behavior:IsA("ModuleScript") then
-		behavior.Source = shared.Source
-	end
+local function warnFailure(instance: Instance, typeId: string, phase: string, problem: any)
+	warn(
+		`[FraguaRuntime] {SIDE} {phase} failed for type "{typeId}" at {instance:GetFullName()}: {tostring(problem)}`
+	)
 end
 
-local function loadBehavior(instance: Instance)
-	syncFromShared(instance)
-	local module = instance:FindFirstChild(BEHAVIOR_NAME)
-	if not module or not module:IsA("ModuleScript") then
-		return nil
+local function findTemplate(typeId: string): ModuleScript?
+	local root = ServerStorage:FindFirstChild("Fragua")
+	local types = root and root:FindFirstChild("Types")
+	local template = types and types:FindFirstChild(typeId .. TEMPLATE_SUFFIX)
+	if template and template:IsA("ModuleScript") then
+		return template
 	end
-	local ok, result = pcall(require, module)
-	if ok and typeof(result) == "table" then
-		return result
-	end
-	warn("[FraguaRuntime] Failed to require Behavior for", instance:GetFullName(), result)
 	return nil
 end
 
 local function start(instance: Instance)
-	if started[instance] then
+	if started[instance] ~= nil then
 		return
 	end
-	local behavior = loadBehavior(instance)
-	if not behavior then
+	local typeId = instance:GetAttribute(TYPE_ATTR)
+	if typeof(typeId) ~= "string" or typeId == "" then
 		return
 	end
-	started[instance] = behavior
-	if typeof(behavior.onStart) == "function" then
-		task.spawn(behavior.onStart, instance)
-	end
+
+	local state = { typeId = typeId, behavior = nil }
+	started[instance] = state
+	task.spawn(function()
+		local phase = "load"
+		local ok, problem = pcall(function()
+			local template = findTemplate(typeId)
+			assert(template, `missing {typeId .. TEMPLATE_SUFFIX}`)
+			local behavior = require(template)
+			assert(typeof(behavior) == "table", "behavior module must return a table")
+			if started[instance] ~= state then
+				return
+			end
+			state.behavior = behavior
+			if typeof(behavior.onStart) == "function" then
+				phase = "onStart"
+				behavior.onStart(instance)
+			end
+		end)
+		if not ok then
+			warnFailure(instance, typeId, phase, problem)
+		end
+	end)
 end
 
 local function stop(instance: Instance)
-	local behavior = started[instance]
-	if not behavior then
+	local state = started[instance]
+	if not state then
 		return
 	end
-	if typeof(behavior.onStop) == "function" then
-		pcall(behavior.onStop, instance)
-	end
 	started[instance] = nil
-end
-
-for _, inst in CollectionService:GetTagged(TAG) do
-	start(inst)
+	local behavior = state.behavior
+	if behavior and typeof(behavior.onStop) == "function" then
+		local ok, problem = pcall(behavior.onStop, instance)
+		if not ok then
+			warnFailure(instance, state.typeId, "onStop", problem)
+		end
+	end
 end
 
 CollectionService:GetInstanceAddedSignal(TAG):Connect(start)
 CollectionService:GetInstanceRemovedSignal(TAG):Connect(stop)
 
+for _, instance in CollectionService:GetTagged(TAG) do
+	start(instance)
+end
+
 game:BindToClose(function()
-	for inst in pairs(started) do
-		stop(inst)
+	for instance in started do
+		stop(instance)
 	end
 end)
 ]=]

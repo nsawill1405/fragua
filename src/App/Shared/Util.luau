@@ -53,9 +53,9 @@ end
 function Util.parseValue(valueType: string, text: string): (boolean, any)
 	if valueType == "string" or valueType == "enum" then
 		return true, text
-	elseif valueType == "number" then
+	elseif valueType == "number" or valueType == "integer" then
 		local n = tonumber(text)
-		if n == nil then
+		if n == nil or (valueType == "integer" and n % 1 ~= 0) then
 			return false, nil
 		end
 		return true, n
@@ -80,6 +80,12 @@ function Util.parseValue(valueType: string, text: string): (boolean, any)
 			return true, Color3.fromRGB(rn, gn, bn)
 		end
 		return true, Color3.new(rn, gn, bn)
+	elseif valueType == "Vector2" then
+		local x, y = string.match(text, "^%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*$")
+		if not x then
+			return false, nil
+		end
+		return true, Vector2.new(tonumber(x), tonumber(y))
 	elseif valueType == "Vector3" then
 		local x, y, z = string.match(text, "^%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*$")
 		if not x then
@@ -89,8 +95,36 @@ function Util.parseValue(valueType: string, text: string): (boolean, any)
 	elseif valueType == "BrickColor" then
 		local ok, value = pcall(BrickColor.new, text)
 		return ok, if ok then value else nil
+	elseif valueType == "UDim" then
+		local scale, offset = string.match(text, "^%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*$")
+		if not scale then
+			return false, nil
+		end
+		return true, UDim.new(tonumber(scale), tonumber(offset))
+	elseif valueType == "UDim2" then
+		local xScale, xOffset, yScale, yOffset =
+			string.match(text, "^%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*,%s*([%-%d%.]+)%s*$")
+		if not xScale then
+			return false, nil
+		end
+		return true, UDim2.new(tonumber(xScale), tonumber(xOffset), tonumber(yScale), tonumber(yOffset))
+	elseif valueType == "CFrame" then
+		local components = {}
+		for component in string.gmatch(text, "[^,%s]+") do
+			local number = tonumber(component)
+			if not number then
+				return false, nil
+			end
+			table.insert(components, number)
+		end
+		if #components ~= 12 then
+			return false, nil
+		end
+		return true, CFrame.new(table.unpack(components))
+	elseif valueType == "Instance" or valueType == "FraguaInstance" then
+		return text == "", nil
 	end
-	return true, text
+	return false, nil
 end
 
 function Util.formatValue(value: any): string
@@ -104,10 +138,24 @@ function Util.formatValue(value: any): string
 		)
 	elseif t == "Vector3" then
 		return string.format("%.3g, %.3g, %.3g", value.X, value.Y, value.Z)
+	elseif t == "Vector2" then
+		return string.format("%.3g, %.3g", value.X, value.Y)
 	elseif t == "boolean" then
 		return if value then "true" else "false"
 	elseif t == "BrickColor" then
 		return value.Name
+	elseif t == "UDim" then
+		return string.format("%.3g, %d", value.Scale, value.Offset)
+	elseif t == "UDim2" then
+		return string.format("%.3g, %d, %.3g, %d", value.X.Scale, value.X.Offset, value.Y.Scale, value.Y.Offset)
+	elseif t == "CFrame" then
+		local components = { value:GetComponents() }
+		for index, component in components do
+			components[index] = string.format("%.6g", component)
+		end
+		return table.concat(components, ", ")
+	elseif value == nil then
+		return ""
 	end
 	return tostring(value)
 end
