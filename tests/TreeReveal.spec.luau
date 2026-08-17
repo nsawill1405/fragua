@@ -9,6 +9,12 @@ return {
 		assert(source:find("scrollToInstance", 1, true))
 		assert(source:find("expanded[current] = true", 1, true))
 	end,
+	["double click opens script documents"] = function()
+		local source = fs.readFile("src/App/Explorer/Tree.luau")
+		assert(source:find("OpenScriptDocumentAsync", 1, true))
+		assert(source:find("openIfScript", 1, true))
+		assert(source:find("Open Script", 1, true))
+	end,
 	["hides sticker internals so expand arrows dont flash on select"] = function()
 		local source = fs.readFile("src/App/Explorer/Tree.luau")
 		assert(source:find('_Sticker', 1, true))

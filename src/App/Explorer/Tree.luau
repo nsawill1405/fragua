@@ -18,15 +18,19 @@ local SelectionModel = require(script.Parent.SelectionModel)
 
 local Tree = {}
 
+local function openScriptDocument(scriptInst: LuaSourceContainer)
+	task.spawn(function()
+		local ok, opened, err = pcall(ScriptEditorService.OpenScriptDocumentAsync, ScriptEditorService, scriptInst)
+		if not ok or not opened then
+			warn(`[Fragua] Could not open {scriptInst:GetFullName()}: {tostring(if ok then err else opened)}`)
+		end
+	end)
+end
+
 local function openBehaviorScript(typeId: string, side: string)
 	local behavior = Registry.ensureBehaviorTemplate(typeId, side)
 	Selection:Set({ behavior })
-	task.spawn(function()
-		local ok, opened, err = pcall(ScriptEditorService.OpenScriptDocumentAsync, ScriptEditorService, behavior)
-		if not ok or not opened then
-			warn(`[Fragua] Could not open {BehaviorModel.name(typeId, side)}: {tostring(if ok then err else opened)}`)
-		end
-	end)
+	openScriptDocument(behavior)
 end
 
 local DEFAULT_SERVICE_COLORS: { [string]: Color3 } = {
@@ -200,6 +204,8 @@ function Tree.mount(
 	local modHeld = false
 	local lastSelectAt = 0
 	local lastSelectInst: Instance? = nil
+	local lastClickAt = 0
+	local lastClickInst: Instance? = nil
 	local dropTarget: Instance? = nil
 	local dragging = false
 	local dragPressed = false
@@ -423,6 +429,14 @@ function Tree.mount(
 			mod = inputHasModifier(input, Enum.ModifierKey.Meta)
 		end
 		return shift, mod
+	end
+
+	local function openIfScript(instance: Instance): boolean
+		if instance:IsA("LuaSourceContainer") then
+			openScriptDocument(instance)
+			return true
+		end
+		return false
 	end
 
 	local function selectWithModifiers(instance: Instance, input: InputObject?)
@@ -744,6 +758,13 @@ function Tree.mount(
 				disabled = multi or locked,
 				onClick = function()
 					renameSelected()
+				end,
+			},
+			{
+				label = "Open Script",
+				disabled = not instance:IsA("LuaSourceContainer"),
+				onClick = function()
+					openIfScript(instance)
 				end,
 			},
 			{
@@ -1081,6 +1102,17 @@ function Tree.mount(
 			if dragging then
 				return
 			end
+			local now = os.clock()
+			local doubled = lastClickInst == instance and (now - lastClickAt) < 0.35
+			lastClickAt = now
+			lastClickInst = instance
+			if doubled then
+				renameToken += 1
+				if openIfScript(instance) then
+					return
+				end
+				return
+			end
 			local shift, mod = modifierState()
 			-- click is rename only. selection already happened on inputbegan
 			if selected[instance] ~= true or isServiceRoot(instance) or mod or shift then
@@ -1364,6 +1396,11 @@ function Tree.mount(
 
 			if input.KeyCode == Enum.KeyCode.F2 then
 				renameSelected()
+			elseif input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter then
+				local inst = Selection:Get()[1]
+				if inst then
+					openIfScript(inst)
+				end
 			elseif input.KeyCode == Enum.KeyCode.Delete or input.KeyCode == Enum.KeyCode.Backspace then
 				deleteSelected()
 			elseif input.KeyCode == Enum.KeyCode.D and shiftDown() and not modDown() then
