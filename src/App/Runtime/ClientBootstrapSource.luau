@@ -1,6 +1,7 @@
 -- Source string for StarterPlayer.StarterPlayerScripts.FraguaClientRuntime
 return [=[
--- Fragua client play-mode behavior host
+-- Fragua client play-mode behavior host. Managed; plugin overwrites this Source.
+-- AI / MCP guide: read the README ModuleScript in the Fragua plugin folder.
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -20,8 +21,23 @@ end
 
 local function findTemplate(typeId: string): ModuleScript?
 	local catalog = ReplicatedStorage:FindFirstChild(CATALOG_NAME)
-	local definition = catalog and catalog:FindFirstChild(typeId)
-	local template = definition and definition:FindFirstChild(TEMPLATE_NAME)
+	if not catalog then
+		catalog = ReplicatedStorage:WaitForChild(CATALOG_NAME, 10)
+	end
+	if not catalog then
+		return nil
+	end
+	local definition = catalog:FindFirstChild(typeId)
+	if not definition then
+		definition = catalog:WaitForChild(typeId, 10)
+	end
+	if not definition then
+		return nil
+	end
+	local template = definition:FindFirstChild(TEMPLATE_NAME)
+	if not template then
+		template = definition:WaitForChild(TEMPLATE_NAME, 5)
+	end
 	if template and template:IsA("ModuleScript") then
 		return template
 	end
@@ -56,6 +72,9 @@ local function start(instance: Instance)
 			end
 		end)
 		if not ok then
+			if started[instance] == state then
+				started[instance] = nil
+			end
 			warnFailure(instance, typeId, phase, problem)
 		end
 	end)
@@ -78,6 +97,43 @@ end
 
 CollectionService:GetInstanceAddedSignal(TAG):Connect(start)
 CollectionService:GetInstanceRemovedSignal(TAG):Connect(stop)
+
+local function startTaggedOfType(typeId: string)
+	for _, instance in CollectionService:GetTagged(TAG) do
+		if instance:GetAttribute(TYPE_ATTR) == typeId then
+			start(instance)
+		end
+	end
+end
+
+local function watchDefinition(definition: Instance)
+	definition.ChildAdded:Connect(function(child)
+		if child.Name == TEMPLATE_NAME then
+			startTaggedOfType(definition.Name)
+		end
+	end)
+end
+
+local function watchCatalog(catalog: Instance)
+	catalog.ChildAdded:Connect(function(child)
+		watchDefinition(child)
+		startTaggedOfType(child.Name)
+	end)
+	for _, child in catalog:GetChildren() do
+		watchDefinition(child)
+	end
+end
+
+local existingCatalog = ReplicatedStorage:FindFirstChild(CATALOG_NAME)
+if existingCatalog then
+	watchCatalog(existingCatalog)
+else
+	ReplicatedStorage.ChildAdded:Connect(function(child)
+		if child.Name == CATALOG_NAME then
+			watchCatalog(child)
+		end
+	end)
+end
 
 for _, instance in CollectionService:GetTagged(TAG) do
 	start(instance)

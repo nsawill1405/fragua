@@ -53,6 +53,7 @@ return {
 		assert(ok and Header, "ScriptHeader should be available")
 		assert(Header.shouldSkip("ServerStorage.Fragua.Types.ZombieEditBehavior"))
 		assert(Header.shouldSkip("ServerStorage.Fragua.BehaviorBackups.ZombieBehaviorBackup1"))
+		assert(Header.shouldSkip("ServerStorage.Fragua.README"))
 		assert(Header.shouldSkip("ReplicatedStorage.FraguaTypes.Zombie.ClientBehavior"))
 		assert(Header.shouldSkip("CoreGui.RobloxGui.Modules.Flags.GetFFlagBetaBadge"))
 		assert(not Header.shouldSkip("ServerStorage.GameModules.Combat"))

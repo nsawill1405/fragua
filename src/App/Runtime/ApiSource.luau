@@ -300,11 +300,25 @@ end
 local function encodeTypeSurface(surface): string
 	local entries = sortedTypeEntries(surface)
 	local names = aliasNames(entries)
+	local enums = {}
+	for _, enum in surface.enums or {} do
+		if typeof(enum.id) == "string" and isIdentifier(enum.id) then
+			table.insert(enums, enum)
+		end
+	end
+	table.sort(enums, function(a, b)
+		return a.id < b.id
+	end)
 	local sections = {
 		"export type FraguaTypeItem<Name> = {",
 		"\tName: Name,",
 		"\tValue: Name,",
 		'\tEnumType: "FraguaType",',
+		"}",
+		"export type FraguaEnumItem<EnumName, ItemName> = {",
+		"\tName: ItemName,",
+		"\tValue: ItemName,",
+		"\tEnumType: EnumName,",
 		"}",
 	}
 	for _, entry in entries do
@@ -321,7 +335,29 @@ local function encodeTypeSurface(surface): string
 		table.insert(enumLines, enumField(entry.id))
 	end
 	table.insert(enumLines, "}")
-	table.insert(enumLines, "type FraguaEnum = typeof(RobloxEnum) & { FraguaType: FraguaTypeEnum }")
+	local enumFields = { "FraguaType: FraguaTypeEnum" }
+	for _, enum in enums do
+		local enumTypeName = enum.id .. "Enum"
+		table.insert(enumLines, "")
+		table.insert(enumLines, string.format("type %s = {", enumTypeName))
+		table.insert(enumLines, string.format("\tName: %s,", quote(enum.id)))
+		table.insert(
+			enumLines,
+			string.format("\tGetEnumItems: (self: %s) -> { FraguaEnumItem<%s, string> },", enumTypeName, quote(enum.id))
+		)
+		for _, item in enum.items or {} do
+			local field = memberName(item)
+			if field then
+				table.insert(
+					enumLines,
+					string.format("\t%s: FraguaEnumItem<%s, %s>,", field, quote(enum.id), quote(item))
+				)
+			end
+		end
+		table.insert(enumLines, "}")
+		table.insert(enumFields, string.format("%s: %s", enum.id, enumTypeName))
+	end
+	table.insert(enumLines, "type FraguaEnum = typeof(RobloxEnum) & { " .. table.concat(enumFields, ", ") .. " }")
 	table.insert(sections, table.concat(enumLines, "\n"))
 	for _, side in { "Server", "Client", "Core" } do
 		table.insert(sections, facadeTypes(side, entries, names))
@@ -330,7 +366,9 @@ local function encodeTypeSurface(surface): string
 end
 
 local SOURCE = [=[
--- Fragua runtime API. Managed script headers select Core, Server, or Client.
+-- Fragua runtime API. Managed; plugin overwrites this Source. Do not edit.
+-- Script headers select Core, Server, or Client from this module.
+-- AI / MCP guide: read ServerStorage.Fragua.README (require it for the same text).
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
@@ -345,8 +383,10 @@ local RobloxTypeof = typeof
 local TAG = "FraguaInstance"
 local TYPE_ATTR = "_FraguaType"
 local CATALOG_NAME = "FraguaTypes"
+local ENUMS_CATALOG_NAME = "FraguaEnums"
 local REFERENCE_PREFIX = "_FraguaRef_"
 local NATIVE_CLASSES_NAME = "_FraguaNativeClasses"
+local REFRESH_BINDABLE = "RefreshEditBehaviors"
 
 local CORE_MEMBERS = @@CORE_MEMBERS@@
 local LIFECYCLE_MEMBERS = @@LIFECYCLE_MEMBERS@@
@@ -366,6 +406,10 @@ local behaviorCache = {
 
 local function catalog()
 	return ReplicatedStorage:FindFirstChild(CATALOG_NAME)
+end
+
+local function enumCatalog()
+	return ReplicatedStorage:FindFirstChild(ENUMS_CATALOG_NAME)
 end
 
 local function findDefinition(typeId: string)
@@ -392,6 +436,8 @@ end
 
 local CUSTOM_ITEM_METATABLE = {}
 local customItems = {}
+local customEnumItems = {}
+local customEnumTypes = {}
 
 local function customItem(typeId: string)
 	local existing = customItems[typeId]
@@ -418,6 +464,101 @@ local function customItem(typeId: string)
 	})
 	customItems[typeId] = item
 	return item
+end
+
+local function enumItemNames(enumName: string): { string }
+	local names = {}
+	local root = enumCatalog()
+	local entry = root and root:FindFirstChild(enumName)
+	local folder = entry and entry:FindFirstChild("EnumItems")
+	if folder then
+		local children = folder:GetChildren()
+		table.sort(children, function(a, b)
+			return a.Name < b.Name
+		end)
+		for _, child in children do
+			if child:IsA("StringValue") and child.Value ~= "" then
+				table.insert(names, child.Value)
+			end
+		end
+	end
+	return names
+end
+
+local function customEnumItem(enumName: string, itemName: string)
+	local key = enumName .. "." .. itemName
+	local existing = customEnumItems[key]
+	if existing then
+		return existing
+	end
+	local item = {}
+	setmetatable(item, {
+		__index = function(_, field)
+			if field == "Name" or field == "Value" then
+				return itemName
+			elseif field == "EnumType" then
+				return enumName
+			end
+			return nil
+		end,
+		__newindex = function()
+			error("Fragua enum items are immutable", 2)
+		end,
+		__tostring = function()
+			return "Enum." .. enumName .. "." .. itemName
+		end,
+		__metatable = CUSTOM_ITEM_METATABLE,
+	})
+	customEnumItems[key] = item
+	return item
+end
+
+local function customEnumType(enumName: string)
+	local existing = customEnumTypes[enumName]
+	if existing then
+		return existing
+	end
+	local facade = {}
+	setmetatable(facade, {
+		__index = function(_, key)
+			if key == "Name" then
+				return enumName
+			elseif key == "GetEnumItems" then
+				return function()
+					local items = {}
+					for _, name in enumItemNames(enumName) do
+						table.insert(items, customEnumItem(enumName, name))
+					end
+					return items
+				end
+			elseif RobloxTypeof(key) == "string" then
+				for _, name in enumItemNames(enumName) do
+					if name == key then
+						return customEnumItem(enumName, name)
+					end
+				end
+			end
+			return nil
+		end,
+		__newindex = function()
+			error("Fragua enum types are immutable", 2)
+		end,
+		__tostring = function()
+			return "Enum." .. enumName
+		end,
+		__metatable = "FraguaEnumType",
+	})
+	customEnumTypes[enumName] = facade
+	return facade
+end
+
+local function findCustomEnum(enumName: string)
+	local root = enumCatalog()
+	local entry = root and root:FindFirstChild(enumName)
+	if entry and entry:IsA("Configuration") then
+		return customEnumType(enumName)
+	end
+	return nil
 end
 
 local FraguaType = {}
@@ -464,10 +605,33 @@ setmetatable(FraguaEnum, {
 			return function()
 				local enums = RobloxEnum:GetEnums()
 				table.insert(enums, 1, FraguaType)
+				local root = enumCatalog()
+				if root then
+					for _, child in root:GetChildren() do
+						if child:IsA("Configuration") then
+							local robloxOk, robloxEnum = pcall(function()
+								return RobloxEnum[child.Name]
+							end)
+							if not robloxOk or robloxEnum == nil then
+								table.insert(enums, customEnumType(child.Name))
+							end
+						end
+					end
+				end
 				return enums
 			end
 		end
-		return RobloxEnum[key]
+		local robloxOk, robloxEnum = pcall(function()
+			return RobloxEnum[key]
+		end)
+		if robloxOk and robloxEnum ~= nil then
+			return robloxEnum
+		end
+		local custom = RobloxTypeof(key) == "string" and findCustomEnum(key)
+		if custom then
+			return custom
+		end
+		return nil
 	end,
 	__newindex = function()
 		error("Enum is immutable", 2)
@@ -1133,6 +1297,17 @@ local function makeFacade(side: string)
 		return result
 	end
 
+	function Facade.RefreshEditBehaviors(typeId: string?)
+		local ServerStorage = game:GetService("ServerStorage")
+		local root = ServerStorage:FindFirstChild("Fragua")
+		local bindable = root and root:FindFirstChild(REFRESH_BINDABLE)
+		if not bindable or not bindable:IsA("BindableFunction") then
+			warn("[Fragua] RefreshEditBehaviors is only available while the plugin is loaded in edit mode")
+			return
+		end
+		bindable:Invoke(typeId)
+	end
+
 	return Facade
 end
 
@@ -1160,6 +1335,7 @@ Fragua.Get = Core.Get
 Fragua.GetProperty = Core.GetProperty
 Fragua.SetProperty = Core.SetProperty
 Fragua.GetInstances = Core.GetInstances
+Fragua.RefreshEditBehaviors = Core.RefreshEditBehaviors
 
 return Fragua
 ]=]

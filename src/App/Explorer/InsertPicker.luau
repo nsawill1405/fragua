@@ -5,6 +5,8 @@ local EngineSchemas = require(script.Parent.Parent.Types.EngineSchemas)
 local IconCatalog = require(script.Parent.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Parent.Types.Registry)
 local TypeEditor = require(script.Parent.Parent.Types.TypeEditor)
+local EnumEditor = require(script.Parent.Parent.Types.EnumEditor)
+local EnumRegistry = require(script.Parent.Parent.Types.EnumRegistry)
 local InsertFlow = require(script.Parent.InsertFlow)
 
 local Workspace = game:GetService("Workspace")
@@ -16,6 +18,8 @@ export type InsertChoice =
 	| { kind: "custom", typeId: string }
 	| { kind: "create_type" }
 	| { kind: "edit_type", typeId: string }
+	| { kind: "create_enum" }
+	| { kind: "edit_enum", enumId: string }
 
 local creatableCache: { [string]: boolean } = {}
 local function canCreateClass(className: string): boolean
@@ -317,6 +321,17 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 			})
 			order += 1
 
+			row({
+				label = "Create New Enum...",
+				iconId = "emoji_scroll",
+				order = order,
+				onClick = function()
+					overlay:Destroy()
+					onChoose({ kind = "create_enum" })
+				end,
+			})
+			order += 1
+
 			local customCount = 0
 			local customDefs = table.clone(Registry.list())
 			table.sort(customDefs, function(a, b)
@@ -416,6 +431,63 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 			end
 		end
 
+		sectionHeader("Enums", order, sectionCollapsed.Enums == true and not filtering, function()
+			sectionCollapsed.Enums = not sectionCollapsed.Enums
+			rebuild(search.Text)
+		end)
+		order += 1
+
+		if showSection("Enums") then
+			local enumDefs = table.clone(EnumRegistry.list())
+			table.sort(enumDefs, function(a, b)
+				return a.name:lower() < b.name:lower()
+			end)
+			local enumCount = 0
+			for _, def in enumDefs do
+				if lower == "" or string.find(string.lower(def.name), lower, 1, true) then
+					local enumId = def.id
+					row({
+						label = def.name,
+						iconId = "emoji_scroll",
+						order = order,
+						onClick = function()
+							overlay:Destroy()
+							onChoose({ kind = "edit_enum", enumId = enumId })
+						end,
+						onEdit = function()
+							overlay:Destroy()
+							onChoose({ kind = "edit_enum", enumId = enumId })
+						end,
+						onDelete = function()
+							local using = EnumRegistry.typesUsing(Registry.list(), enumId)
+							if #using > 0 then
+								warn(`[Fragua] Enum "{enumId}" is used by {table.concat(using, ", ")}.`)
+								return
+							end
+							EnumRegistry.delete(enumId, Registry.list())
+							rebuild(search.Text)
+						end,
+					})
+					order += 1
+					enumCount += 1
+				end
+			end
+			if enumCount == 0 and lower == "" then
+				local empty = Instance.new("TextLabel")
+				empty.BackgroundTransparency = 1
+				empty.Size = UDim2.new(1, -8, 0, 20)
+				empty.Font = Theme.font
+				empty.TextSize = 11
+				empty.TextColor3 = Theme.textMuted
+				empty.TextXAlignment = Enum.TextXAlignment.Left
+				empty.Text = "  No custom enums yet"
+				empty.LayoutOrder = order
+				empty.ZIndex = 43
+				empty.Parent = scroll
+				order += 1
+			end
+		end
+
 		for _, section in EngineSchemas.insertSections() do
 			local matched = {}
 			for _, className in section.classes do
@@ -485,6 +557,18 @@ function InsertPicker.handleChoice(
 		TypeEditor.open(host, function(_id)
 			refresh()
 		end, choice.typeId)
+		return
+	end
+	if choice.kind == "create_enum" then
+		EnumEditor.open(host, function(_id)
+			refresh()
+		end)
+		return
+	end
+	if choice.kind == "edit_enum" then
+		EnumEditor.open(host, function(_id)
+			refresh()
+		end, choice.enumId)
 		return
 	end
 	if not parent then

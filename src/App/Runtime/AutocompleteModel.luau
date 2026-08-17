@@ -280,9 +280,35 @@ function AutocompleteModel.complete(request, surface, facade)
 	if partial then
 		return typeItems(surface, partial, position)
 	end
-	partial = currentLine:match("Enum%.FraguaType%.([%w_]*)$")
-	if partial then
-		return typeItems(surface, partial, position)
+	local enumName, itemPartial = currentLine:match("Enum%.([%w_]+)%.([%w_]*)$")
+	if enumName then
+		if enumName == "FraguaType" then
+			return typeItems(surface, itemPartial, position)
+		end
+		for _, enum in surface.enums or {} do
+			if enum.id == enumName then
+				local items = {}
+				for _, item in enum.items or {} do
+					if typeof(item) == "string" and matches(item, itemPartial) then
+						local edit = replacement(itemPartial, position)
+						if edit then
+							edit.newText = item
+						end
+						table.insert(items, {
+							label = item,
+							kind = "Enum",
+							detail = "Enum." .. enumName,
+							documentation = "Fragua enum item",
+							textEdit = edit,
+						})
+					end
+				end
+				table.sort(items, function(a, b)
+					return a.label < b.label
+				end)
+				return items
+			end
+		end
 	end
 
 	local localName, access, memberPartial = currentLine:match("([%a_][%w_]*)%s*([%.:])%s*([%w_]*)$")

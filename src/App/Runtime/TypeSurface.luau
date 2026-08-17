@@ -18,7 +18,7 @@ local VALUE_TYPES = {
 	Instance = "Instance",
 }
 
-local function propertyType(property, definitionsById): string
+local function propertyType(property, definitionsById, customEnumIds): string
 	if property.valueType == "FraguaInstance" then
 		local referenceType = property.referenceType
 		if typeof(referenceType) == "string" and definitionsById[referenceType] then
@@ -29,15 +29,18 @@ local function propertyType(property, definitionsById): string
 	if property.valueType == "enum" and property.enumType == "FraguaType" then
 		return "FraguaTypeItem<string>"
 	end
+	if property.valueType == "enum" and typeof(property.enumType) == "string" and customEnumIds[property.enumType] then
+		return `FraguaEnumItem<"{property.enumType}", string>`
+	end
 	return VALUE_TYPES[property.valueType] or "any"
 end
 
-local function resolvedProperties(definition, resolveSchema, definitionsById)
+local function resolvedProperties(definition, resolveSchema, definitionsById, customEnumIds)
 	local byName = {}
 	for _, property in resolveSchema(definition) or {} do
 		if typeof(property.name) == "string" and property.name ~= "" then
 			local copy = table.clone(property)
-			copy.typeName = propertyType(copy, definitionsById)
+			copy.typeName = propertyType(copy, definitionsById, customEnumIds)
 			byName[copy.name] = copy
 		end
 	end
@@ -97,7 +100,7 @@ local function ancestorsFor(definition, definitionsById)
 	return ancestors
 end
 
-function TypeSurface.build(definitions, resolveSchema, resolveBacking, getBehaviorSource, hasBackingMember)
+function TypeSurface.build(definitions, resolveSchema, resolveBacking, getBehaviorSource, hasBackingMember, enums)
 	hasBackingMember = hasBackingMember or defaultHasBackingMember
 	local definitionsById = {}
 	for _, definition in definitions do
@@ -105,6 +108,28 @@ function TypeSurface.build(definitions, resolveSchema, resolveBacking, getBehavi
 			definitionsById[definition.id] = definition
 		end
 	end
+
+	local customEnumIds = {}
+	local enumList = {}
+	for _, enum in enums or {} do
+		if typeof(enum.id) == "string" and enum.id ~= "" then
+			customEnumIds[enum.id] = true
+			local items = {}
+			for _, item in enum.items or {} do
+				if typeof(item) == "string" then
+					table.insert(items, item)
+				end
+			end
+			table.insert(enumList, {
+				id = enum.id,
+				name = enum.name or enum.id,
+				items = items,
+			})
+		end
+	end
+	table.sort(enumList, function(a, b)
+		return a.id < b.id
+	end)
 
 	local types = {}
 	for _, definition in definitionsById do
@@ -117,7 +142,7 @@ function TypeSurface.build(definitions, resolveSchema, resolveBacking, getBehavi
 			name = definition.name or definition.id,
 			backingClass = backingClass,
 			ancestors = ancestorsFor(definition, definitionsById),
-			properties = resolvedProperties(definition, resolveSchema, definitionsById),
+			properties = resolvedProperties(definition, resolveSchema, definitionsById, customEnumIds),
 			serverMethods = methodsFor(definition.id, "Server", backingClass, getBehaviorSource, hasBackingMember),
 			clientMethods = methodsFor(definition.id, "Client", backingClass, getBehaviorSource, hasBackingMember),
 		})
@@ -125,7 +150,7 @@ function TypeSurface.build(definitions, resolveSchema, resolveBacking, getBehavi
 	table.sort(types, function(a, b)
 		return a.id < b.id
 	end)
-	return { types = types }
+	return { types = types, enums = enumList }
 end
 
 return TypeSurface

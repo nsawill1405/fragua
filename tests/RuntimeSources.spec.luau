@@ -1,6 +1,7 @@
 local fs = require("@lune/fs")
 local serverSource = require("../src/App/Runtime/BootstrapSource")
 local clientSource = require("../src/App/Runtime/ClientBootstrapSource")
+local guideSource = require("../src/App/Runtime/GuideSource")
 
 local function eachHost(callback)
 	for side, source in { Server = serverSource, Client = clientSource } do
@@ -47,6 +48,20 @@ return {
 			assert(removed < initial, `{side} removed signal must connect before initial enumeration`)
 		end)
 	end,
+	["client host waits for replicated type entries before failing"] = function()
+		assert(clientSource:find("WaitForChild(typeId, 10)", 1, true))
+		assert(clientSource:find("WaitForChild(TEMPLATE_NAME, 5)", 1, true))
+		assert(clientSource:find("startTaggedOfType", 1, true))
+		assert(clientSource:find("watchCatalog", 1, true))
+	end,
+	["runtime hosts clear started state after a failed load so a later catalog arrival can retry"] = function()
+		eachHost(function(source, side)
+			local failure = assert(source:find("if not ok then", 1, true))
+			local clear = assert(source:find("started[instance] = nil", failure, true))
+			local warnCall = assert(source:find("warnFailure(instance, typeId, phase, problem)", clear, true))
+			assert(failure < clear and clear < warnCall, `{side} failed loads must clear started before warning`)
+		end)
+	end,
 	["runtime hosts schedule protected loading outside the caller"] = function()
 		eachHost(function(source, side)
 			local spawn = assert(source:find("task.spawn(function()", 1, true))
@@ -74,6 +89,11 @@ return {
 		assert(source:find('"ServerBehavior"', 1, true))
 		assert(source:find('"ClientBehavior"', 1, true))
 	end,
+	["managed module sync does not rewrite place modules during play"] = function()
+		local source = fs.readFile("src/App/Runtime/EnsurePlaceModules.luau")
+		assert(source:find("IsRunning", 1, true))
+		assert(source:find("IsEdit", 1, true))
+	end,
 	["managed module sync covers gateway and both runtime hosts without redundant writes"] = function()
 		local source = fs.readFile("src/App/Runtime/EnsurePlaceModules.luau")
 		assert(source:find('"FraguaRuntime"', 1, true))
@@ -82,6 +102,53 @@ return {
 		-- recreate on source change so roblox require caches cannot keep a stale gateway
 		assert(source:find("Source == source", 1, true))
 		assert(source:find("existing:Destroy()", 1, true))
+	end,
+	["managed module sync injects an ai guide under the plugin root"] = function()
+		local source = fs.readFile("src/App/Runtime/EnsurePlaceModules.luau")
+		assert(source:find("GuideSource", 1, true))
+		assert(source:find('"README"', 1, true))
+		assert(source:find("ensurePluginRoot()", 1, true))
+		assert(source:find("Constants.ROOT_FOLDER", 1, true))
+	end,
+	["ai guide source compiles and points mcp at types, tags, and managed paths"] = function()
+		local chunk, compileError = loadstring(guideSource, "FraguaREADME")
+		assert(chunk, compileError)
+		local ok, text = pcall(chunk)
+		assert(ok and typeof(text) == "string" and #text > 200, "guide module should return documentation text")
+		for _, needle in
+			{
+				"Fragua",
+				"MCP",
+				"ServerStorage.Fragua.README",
+				"ReplicatedStorage.Fragua",
+				"ReplicatedStorage.FraguaTypes",
+				"ServerScriptService.FraguaRuntime",
+				"FraguaClientRuntime",
+				"_FraguaType",
+				"FraguaInstance",
+				"EditBehavior",
+				"ServerBehavior",
+				"ClientBehavior",
+				"_FraguaManaged",
+				"search_game_tree",
+				"script_read",
+				"execute_luau",
+				"Instance.new",
+				"RefreshEditBehaviors",
+				"FraguaEnums",
+				"Create New Enum",
+			}
+		do
+			assert(text:find(needle, 1, true), `guide should mention {needle}`)
+		end
+		assert(guideSource:find("_FraguaManaged", 1, true))
+	end,
+	["runtime hosts point at the ai guide without the client touching serverstorage"] = function()
+		assert(serverSource:find("ServerStorage.Fragua.README", 1, true))
+		assert(clientSource:find("README ModuleScript", 1, true))
+		assert(not clientSource:find("ServerStorage", 1, true))
+		local api = fs.readFile("src/App/Runtime/ApiSource.luau")
+		assert(api:find("ServerStorage.Fragua.README", 1, true))
 	end,
 	["managed gateway sync builds from an optional type surface"] = function()
 		local source = fs.readFile("src/App/Runtime/EnsurePlaceModules.luau")

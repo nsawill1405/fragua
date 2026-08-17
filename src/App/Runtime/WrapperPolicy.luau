@@ -18,6 +18,7 @@ local CORE_MEMBERS = {
 	SetProperty = true,
 	Get = true,
 	GetInstances = true,
+	RefreshEditBehaviors = true,
 	Enum = true,
 	type = true,
 	typeof = true,

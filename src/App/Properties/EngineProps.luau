@@ -1,4 +1,5 @@
 local EnginePropertyCatalog = require(script.Parent.Parent.Types.EnginePropertyCatalog)
+local EnumRegistry = require(script.Parent.Parent.Types.EnumRegistry)
 
 export type EngineProp = EnginePropertyCatalog.EngineProp
 
@@ -41,6 +42,12 @@ function EngineProps.set(instance: Instance, name: string, value: any): boolean
 end
 
 function EngineProps.resolveEnumItems(prop: EngineProp, currentValue: any): { string }?
+	if prop.enumType then
+		local custom = EnumRegistry.get(prop.enumType)
+		if custom then
+			return table.clone(custom.items)
+		end
+	end
 	if prop.enumItems then
 		return prop.enumItems
 	end

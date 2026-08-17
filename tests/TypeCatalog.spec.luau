@@ -59,4 +59,16 @@ return {
 			assert(names[index - 1] < names[index], "native class metadata should be sorted and unique")
 		end
 	end,
+	["catalog sync skips rebuild outside edit mode"] = function()
+		local source = fs.readFile("src/App/Runtime/TypeCatalog.luau")
+		assert(source:find("IsRunning", 1, true))
+		assert(source:find("IsEdit", 1, true))
+		assert(source:find("play client has no ServerStorage types", 1, true))
+	end,
+	["catalog syncs custom enums into FraguaEnums"] = function()
+		local source = fs.readFile("src/App/Runtime/TypeCatalog.luau")
+		assert(source:find("FraguaEnums", 1, true))
+		assert(source:find("surface.enums", 1, true))
+		assert(source:find('ensureChild(entry, "Folder", "EnumItems")', 1, true))
+	end,
 }

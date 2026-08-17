@@ -268,6 +268,36 @@ return {
 		local compiled, chunk = pcall(loadstring, source, "FraguaEnumProperty")
 		assert(compiled and chunk, tostring(chunk))
 	end,
+	["custom enums generate proxy types and RefreshEditBehaviors"] = function()
+		local source = ApiSource.build({
+			types = {
+				{
+					id = "Zombie",
+					backingClass = "Part",
+					properties = {
+						{
+							name = "Stance",
+							valueType = "enum",
+							enumType = "Mood",
+							typeName = 'FraguaEnumItem<"Mood", string>',
+						},
+					},
+				},
+			},
+			enums = {
+				{ id = "Mood", name = "Mood", items = { "Happy", "Sad" } },
+			},
+		})
+		assert(source:find("FraguaEnumItem", 1, true))
+		assert(source:find("type MoodEnum =", 1, true))
+		assert(source:find('Happy: FraguaEnumItem<"Mood", "Happy">', 1, true))
+		assert(source:find("Mood: MoodEnum", 1, true))
+		assert(source:find("FraguaEnums", 1, true))
+		assert(source:find("function Facade.RefreshEditBehaviors", 1, true))
+		assert(source:find("Fragua.RefreshEditBehaviors = Core.RefreshEditBehaviors", 1, true))
+		local compiled, chunk = pcall(loadstring, source, "CustomEnumFragua")
+		assert(compiled and chunk, tostring(chunk))
+	end,
 	["native writable properties are not treated as wrapper-owned slots"] = function()
 		local source = buildSource()
 		local newIndex = assert(source:find("WRAPPER_METATABLE.__newindex", 1, true))
