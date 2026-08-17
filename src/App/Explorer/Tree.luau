@@ -83,6 +83,13 @@ local function isHidden(inst: Instance): boolean
 	if inst.Name == "_FraguaNameplate" then
 		return true
 	end
+	-- sticker internals. they only exist after select and were flashing a chevron
+	if string.sub(inst.Name, 1, 8) == "_Sticker" then
+		return true
+	end
+	if string.sub(inst.Name, 1, 10) == "_FraguaRef" then
+		return true
+	end
 	-- hide managed place modules (api / runtime)
 	if inst:GetAttribute("_FraguaManaged") == true then
 		return true
@@ -306,7 +313,7 @@ function Tree.mount(
 	local function refreshPlusVisibility()
 		for inst, plus in plusByInstance do
 			if plus.Parent then
-				plus.Visible = hoveredInstance == inst
+				plus.Visible = hoveredInstance == inst or selected[inst] == true
 			end
 		end
 		for inst in rowByInstance do
@@ -867,9 +874,10 @@ function Tree.mount(
 		twist.Size = UDim2.fromOffset(18, Theme.rowHeight)
 		twist.Font = Enum.Font.SourceSansBold
 		twist.TextSize = 16
-		twist.TextColor3 = Theme.textMuted
+		twist.TextColor3 = Theme.text
 		twist.Text = if hasChildren then ">" else ""
 		twist.Rotation = if expanded[instance] then 90 else 0
+		twist.Visible = hasChildren
 		twist.Parent = row
 		if hasChildren then
 			twist.MouseButton1Click:Connect(function()
@@ -881,7 +889,7 @@ function Tree.mount(
 				twist.TextColor3 = Theme.accent
 			end)
 			twist.MouseLeave:Connect(function()
-				twist.TextColor3 = Theme.textMuted
+				twist.TextColor3 = Theme.text
 			end)
 		else
 			twist.Active = false
