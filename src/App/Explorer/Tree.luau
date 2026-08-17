@@ -113,6 +113,9 @@ local function isHidden(inst: Instance): boolean
 		if parent and parent.Name == Constants.TYPES_FOLDER then
 			return true
 		end
+		if parent and parent.Name == Constants.ENUMS_FOLDER then
+			return true
+		end
 	end
 	return false
 end
@@ -298,6 +301,8 @@ function Tree.mount(
 		refreshPlusVisibility()
 	end
 
+	local rebuild: () -> ()
+
 	local function paintSelection()
 		syncSelectionFromStudio()
 		-- drop dead selection anchors so undo/redo doesnt keep stale refs
@@ -306,6 +311,61 @@ function Tree.mount(
 		end
 		for inst in rowByInstance do
 			paintRow(inst)
+		end
+	end
+
+	local function expandAncestors(inst: Instance): boolean
+		local changed = false
+		local current: Instance? = inst.Parent
+		while current and current ~= game do
+			if not expanded[current] then
+				expanded[current] = true
+				changed = true
+			end
+			if current.Parent == game then
+				sectionOpen[current.Name] = true
+			end
+			current = current.Parent
+		end
+		return changed
+	end
+
+	local function scrollToInstance(inst: Instance)
+		task.defer(function()
+			local row = rowByInstance[inst]
+			if not row or row.Parent == nil then
+				return
+			end
+			local viewH = scroll.AbsoluteWindowSize.Y
+			if viewH <= 0 then
+				return
+			end
+			local relY = row.AbsolutePosition.Y - scroll.AbsolutePosition.Y + scroll.CanvasPosition.Y
+			local top = scroll.CanvasPosition.Y
+			local bottom = top + viewH
+			local rowBottom = relY + row.AbsoluteSize.Y
+			if relY < top or rowBottom > bottom then
+				scroll.CanvasPosition = Vector2.new(0, math.max(0, relY - viewH * 0.28))
+			end
+		end)
+	end
+
+	local function revealStudioSelection()
+		local list = Selection:Get()
+		local opened = false
+		for _, inst in list do
+			if isAlive(inst) and expandAncestors(inst) then
+				opened = true
+			end
+		end
+		if opened then
+			rebuild()
+		else
+			paintSelection()
+		end
+		local first = list[1]
+		if first then
+			scrollToInstance(first)
 		end
 	end
 
@@ -355,8 +415,6 @@ function Tree.mount(
 			setStudioSelection(instance)
 		end
 	end
-
-	local rebuild: () -> ()
 
 	local function beginRename(instance: Instance, label: TextButton, cluster: Frame)
 		if isServiceRoot(instance) then
@@ -1135,7 +1193,7 @@ function Tree.mount(
 	local scheduleRebuild = Util.debounce(0.08, rebuild)
 
 	local conns: { RBXScriptConnection } = {}
-	table.insert(conns, Selection.SelectionChanged:Connect(paintSelection))
+	table.insert(conns, Selection.SelectionChanged:Connect(revealStudioSelection))
 	table.insert(
 		conns,
 		game.DescendantAdded:Connect(function(inst)
@@ -1285,12 +1343,9 @@ function Tree.mount(
 			selectionAnchor = nil
 		end,
 		reveal = function(inst: Instance)
-			local current: Instance? = inst.Parent
-			while current and current ~= game do
-				expanded[current] = true
-				current = current.Parent
-			end
+			expandAncestors(inst)
 			rebuild()
+			scrollToInstance(inst)
 		end,
 		getSelection = function(): Instance?
 			return Selection:Get()[1]

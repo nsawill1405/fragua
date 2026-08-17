@@ -8,7 +8,9 @@ local UiUtil = require(script.Parent.Shared.UiUtil)
 local IconCatalog = require(script.Parent.Types.IconCatalog)
 local BehaviorModel = require(script.Parent.Types.BehaviorModel)
 local Registry = require(script.Parent.Types.Registry)
+local Host = require(script.Parent.Behaviors.Host)
 local EngineProps = require(script.EngineProps)
+local PropertyEnumItems = require(script.PropertyEnumItems)
 local Controls = require(script.Controls)
 local MetadataEditor = require(script.MetadataEditor)
 local PropertyRefreshPolicy = require(script.PropertyRefreshPolicy)
@@ -188,6 +190,8 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			readonly: boolean?,
 			enumItems: { string }?,
 			enumType: string?,
+			minimum: number?,
+			maximum: number?,
 			onCommit: (any) -> (),
 			onPreview: ((any) -> ())?,
 			changeKind: string?,
@@ -286,10 +290,14 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		end
 
 		if valueType == "number" and typeof(value) == "number" and not readonly then
+			local range = NUMBER_RANGES[prop.name]
+			if typeof(prop.minimum) == "number" and typeof(prop.maximum) == "number" then
+				range = { prop.minimum, prop.maximum }
+			end
 			local field, update = Controls.numberField(valueParent, value, function(n)
 				ChangeHistoryService:SetWaypoint("Fragua Property")
 				prop.onCommit(n)
-			end, NUMBER_RANGES[prop.name], prop.onPreview)
+			end, range, prop.onPreview)
 			field.Size = UDim2.fromScale(1, 1)
 			registerUpdater(update)
 			return
@@ -450,10 +458,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 									value = prop.default
 								end
 							end
-							local enumItems = prop.enumItems
-							if nativeProperty and (typeof(value) == "EnumItem" or prop.valueType == "enum") then
-								enumItems = EngineProps.resolveEnumItems(prop, value)
-							end
+							local enumItems = PropertyEnumItems.forRow(prop, value, EngineProps.resolveEnumItems)
 							push(prop.category or "Data", {
 								name = prop.name,
 								valueType = prop.valueType,
@@ -461,6 +466,8 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 								readonly = prop.readonly == true,
 								enumItems = enumItems,
 								enumType = prop.enumType,
+								minimum = prop.minimum,
+								maximum = prop.maximum,
 								onCommit = function(v)
 									if nativeProperty then
 										EngineProps.set(current, captured, v)
@@ -524,6 +531,16 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 								end
 							end,
 						})
+						if capturedSide == "Edit" then
+							push("Behavior", {
+								name = "Edit refresh",
+								valueType = "action",
+								value = "Refresh Edit Behavior",
+								onCommit = function()
+									Host.refreshType(typeId)
+								end,
+							})
+						end
 					end
 				end
 			else

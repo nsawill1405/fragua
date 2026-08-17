@@ -73,6 +73,18 @@ return {
 		assert(propertyByName.Leader.typeName == "Enemy")
 		assert(propertyByName.Transparency.typeName == "number")
 	end,
+	["maps custom enum properties onto FraguaEnumItem"] = function()
+		local surface = requireTypeSurface().build({ { id = "Zombie", extends = "Part" } }, function()
+			return { { name = "Stance", valueType = "enum", enumType = "Mood" } }
+		end, function()
+			return "Part"
+		end, function()
+			return nil
+		end, nil, { { id = "Mood", name = "Mood", items = { "Happy", "Sad" } } })
+		assert(surface.enums[1].id == "Mood")
+		assert(surface.enums[1].items[1] == "Happy")
+		assert(surface.types[1].properties[1].typeName == 'FraguaEnumItem<"Mood", string>')
+	end,
 	["sorts side methods by name"] = function()
 		local surface = requireTypeSurface().build({ { id = "Zombie" } }, function()
 			return {}

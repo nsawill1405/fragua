@@ -11,7 +11,7 @@ local function ids(definitions)
 	return result
 end
 
-function EnumDefaults.names(robloxNames, _definitions)
+function EnumDefaults.names(robloxNames, _definitions, customEnums)
 	local result, seen = {}, {}
 	for _, name in robloxNames or {} do
 		if not seen[name] then
@@ -21,14 +21,30 @@ function EnumDefaults.names(robloxNames, _definitions)
 	end
 	if not seen.FraguaType then
 		table.insert(result, "FraguaType")
+		seen.FraguaType = true
+	end
+	for _, enum in customEnums or {} do
+		if typeof(enum.id) == "string" and not seen[enum.id] then
+			seen[enum.id] = true
+			table.insert(result, enum.id)
+		end
 	end
 	table.sort(result)
 	return result
 end
 
-function EnumDefaults.items(enumTypeName, definitions, robloxItems)
+function EnumDefaults.items(enumTypeName, definitions, robloxItems, customEnums)
 	if enumTypeName == "FraguaType" then
 		return ids(definitions)
+	end
+	for _, enum in customEnums or {} do
+		if enum.id == enumTypeName then
+			local items = {}
+			for _, item in enum.items or {} do
+				table.insert(items, item)
+			end
+			return items
+		end
 	end
 	return if robloxItems then robloxItems(enumTypeName) else {}
 end

@@ -4,5 +4,7 @@ return {
 	TAG = "FraguaInstance",
 	ROOT_FOLDER = "Fragua",
 	TYPES_FOLDER = "Types",
+	ENUMS_FOLDER = "Enums",
 	BEHAVIOR_NAME = "Behavior",
+	REFRESH_BINDABLE = "RefreshEditBehaviors",
 }

@@ -1,6 +1,7 @@
 -- Source string for ServerScriptService.FraguaRuntime
 return [=[
--- Fragua server play-mode behavior host
+-- Fragua server play-mode behavior host. Managed; plugin overwrites this Source.
+-- AI / MCP guide: read ServerStorage.Fragua.README
 local CollectionService = game:GetService("CollectionService")
 local ServerStorage = game:GetService("ServerStorage")
 
@@ -55,6 +56,9 @@ local function start(instance: Instance)
 			end
 		end)
 		if not ok then
+			if started[instance] == state then
+				started[instance] = nil
+			end
 			warnFailure(instance, typeId, phase, problem)
 		end
 	end)

@@ -956,6 +956,10 @@ local function sanitizedBehaviorSource(template: ModuleScript): string
 	return stripped
 end
 
+function Registry.notifyChanged()
+	fireChanged()
+end
+
 function Registry.getBehaviorSource(typeId: string, side: string): string?
 	BehaviorModel.name(typeId, side)
 	migrateLegacyBehavior(typeId)

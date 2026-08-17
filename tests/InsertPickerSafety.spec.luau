@@ -11,4 +11,12 @@ return {
 		assert(body:find("warn(", 1, true), "custom insert must warn on failure")
 		assert(body:find("afterInsert", 1, true), "custom insert must still call afterInsert on success")
 	end,
+	["insert picker can create and edit custom enums"] = function()
+		local source = fs.readFile("src/App/Explorer/InsertPicker.luau")
+		assert(source:find("Create New Enum...", 1, true))
+		assert(source:find('kind = "create_enum"', 1, true))
+		assert(source:find('kind = "edit_enum"', 1, true))
+		assert(source:find("EnumEditor.open", 1, true))
+		assert(source:find("EnumRegistry.delete", 1, true))
+	end,
 }

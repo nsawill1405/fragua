@@ -5,6 +5,7 @@ local EngineSchemas = if script
 local TypeCatalog = {}
 
 local CATALOG_NAME = "FraguaTypes"
+local ENUMS_CATALOG_NAME = "FraguaEnums"
 local PRIVATE_BEHAVIOR_NAMES = { "Behavior", "EditBehavior", "ServerBehavior" }
 local REFERENCE_PREFIX = "_FraguaRef_"
 local NATIVE_CLASSES_NAME = "_FraguaNativeClasses"
@@ -189,7 +190,13 @@ local function syncClientBehavior(typeEntry: Instance, registry, entry)
 end
 
 function TypeCatalog.sync(registry, surface)
+	local RunService = game:GetService("RunService")
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	-- play client has no ServerStorage types; rebuilding here would prune
+	-- replicated catalogue entries down to whatever the plugin can seed
+	if RunService:IsRunning() and not RunService:IsEdit() then
+		return ReplicatedStorage:FindFirstChild(CATALOG_NAME)
+	end
 	local root = ensureChild(ReplicatedStorage, "Folder", CATALOG_NAME)
 	root:SetAttribute("_FraguaManaged", true)
 
@@ -221,6 +228,27 @@ function TypeCatalog.sync(registry, surface)
 
 	for _, child in root:GetChildren() do
 		if child:GetAttribute("_FraguaManaged") == true and not active[child.Name] then
+			child:Destroy()
+		end
+	end
+
+	local enumsRoot = ensureChild(ReplicatedStorage, "Folder", ENUMS_CATALOG_NAME)
+	enumsRoot:SetAttribute("_FraguaManaged", true)
+	local activeEnums = {}
+	for _, enum in surface.enums or {} do
+		if typeof(enum.id) == "string" and enum.id ~= "" then
+			activeEnums[enum.id] = true
+			local entry = ensureChild(enumsRoot, "Configuration", enum.id)
+			entry:SetAttribute("_FraguaManaged", true)
+			entry:SetAttribute("EnumId", enum.id)
+			entry:SetAttribute("DisplayName", enum.name or enum.id)
+			local items = ensureChild(entry, "Folder", "EnumItems")
+			items:SetAttribute("_FraguaManaged", true)
+			syncOrderedStrings(items, enum.items or {})
+		end
+	end
+	for _, child in enumsRoot:GetChildren() do
+		if child:GetAttribute("_FraguaManaged") == true and not activeEnums[child.Name] then
 			child:Destroy()
 		end
 	end

@@ -11,6 +11,14 @@ return {
 		local names = EnumDefaults.names({ "Material", "NormalId" }, definitions)
 		assert(table.find(names, "FraguaType"))
 		assert(table.concat(EnumDefaults.items("FraguaType", definitions), ",") == "BossZombie,Zombie")
+		local customNames = EnumDefaults.names({ "Material" }, definitions, { { id = "Mood" } })
+		assert(table.find(customNames, "Mood"))
+		assert(
+			table.concat(
+				EnumDefaults.items("Mood", definitions, nil, { { id = "Mood", items = { "Happy", "Sad" } } }),
+				","
+			) == "Happy,Sad"
+		)
 		local facade = EnumDefaults.facade(definitions)
 		local selected = facade.FraguaType.Zombie
 		assert(EnumDefaults.write(facade, "FraguaType", selected, { "Zombie" }) == "Zombie")

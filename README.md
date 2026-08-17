@@ -12,6 +12,7 @@
   - Built-in classes
   - Your custom types (with icons)
   - **Create New Type…**
+  - **Create New Enum…**
   - **Delete Type…**
 - Type inheritance with visible read-only inherited properties and direct overrides
 - Searchable categorized icon picker with 160+ Studio-style icons
@@ -54,11 +55,13 @@ Definitions live under:
 ```
 ServerStorage
 └── Fragua
-    └── Types
-        └── Zombie                 (ModuleScript — type definition)
-            ├── ZombieEditBehavior   (ModuleScript — edit-time hooks)
-            ├── ZombieServerBehavior (ModuleScript — play server)
-            └── ClientBehavior       (ModuleScript — play client; catalog copy)
+    ├── Types
+    │   └── Zombie                 (ModuleScript — type definition)
+    │       ├── ZombieEditBehavior   (ModuleScript — edit-time hooks)
+    │       ├── ZombieServerBehavior (ModuleScript — play server)
+    │       └── ClientBehavior       (ModuleScript — play client; catalog copy)
+    └── Enums
+        └── Mood                   (ModuleScript — custom enum items)
 ```
 
 ### Create a type
@@ -95,7 +98,12 @@ Every custom type has three behavior modules:
 | **Server** | Play server | `onStart`, `onStop`, plus declared server methods |
 | **Client** | Play client | `onStart`, `onStop`, plus declared client methods |
 
-Select a custom instance and choose **Edit behavior** in Fragua Properties to open the side you need in Roblox Studio's native script editor.
+Select a custom instance and choose **Edit behavior** in Fragua Properties to open the side you need in Roblox Studio's native script editor. **Refresh Edit Behavior** (next to Edit Edit Behavior) reloads edit-time hooks after you change that script. MCP and place scripts can call the same path:
+
+```luau
+Fragua.RefreshEditBehaviors()         -- every type
+Fragua.RefreshEditBehaviors("Zombie") -- one type
+```
 
 Edit skeleton shape:
 
@@ -149,7 +157,11 @@ local anotherZombie = Instance.new(Enum.FraguaType.Zombie, workspace)
 
 Wrappers interoperate with native Instance APIs through the proxy. Use `.Instance` only at the rare boundary where an API insists on real userdata. Prefer `Fragua.GetTypeId` over `ClassName` when you need the Fragua type id.
 
-The original gateway remains available through `Fragua.Get`, `Fragua.IsA`, `Fragua.GetProperty`, and `Fragua.SetProperty`.
+The original gateway remains available through `Fragua.Get`, `Fragua.IsA`, `Fragua.GetProperty`, `Fragua.SetProperty`, `Fragua.GetInstances`, and `Fragua.RefreshEditBehaviors`.
+
+### Custom enums
+
+Insert Object → **Create New Enum…** to add a named enum (for example `Mood` with `Happy` / `Sad`). It shows up in the type editor enum-type dropdown and in scripts as `Enum.Mood.Happy`. Roblox enum names and `FraguaType` are reserved. Custom enum items are Fragua proxy values, not native `EnumItem` userdata.
 
 ### Typed defaults
 

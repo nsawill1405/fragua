@@ -12,6 +12,7 @@ local TypeDraft = require(script.Parent.TypeDraft)
 local TypeEditorLayout = require(script.Parent.TypeEditorLayout)
 local TypeValue = require(script.Parent.TypeValue)
 local EnumDefaults = require(script.Parent.EnumDefaults)
+local EnumRegistry = require(script.Parent.EnumRegistry)
 local PropertyIdentity = require(script.Parent.PropertyIdentity)
 
 local TypeEditor = {}
@@ -50,7 +51,7 @@ local function enumNames(): { string }
 	for _, enumType in Enum:GetEnums() do
 		table.insert(names, enumType.Name)
 	end
-	return EnumDefaults.names(names, Registry.list())
+	return EnumDefaults.names(names, Registry.list(), EnumRegistry.list())
 end
 
 local function enumItems(enumTypeName: string?): { string }
@@ -59,6 +60,10 @@ local function enumItems(enumTypeName: string?): { string }
 	end
 	if enumTypeName == "FraguaType" then
 		return EnumDefaults.items(enumTypeName, Registry.list())
+	end
+	local custom = EnumRegistry.get(enumTypeName)
+	if custom then
+		return table.clone(custom.items)
 	end
 	local ok, enumType = pcall(function()
 		return (Enum :: any)[enumTypeName]

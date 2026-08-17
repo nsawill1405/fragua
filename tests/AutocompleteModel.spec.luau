@@ -200,4 +200,14 @@ return {
 		assert(find(items, "PlayClientEffect"))
 		assert(not find(items, "Attack"))
 	end,
+	["suggests custom enum items after Enum.Type."] = function()
+		assert(ok and Model, "AutocompleteModel should be available")
+		local catalog = surface()
+		catalog.enums = { { id = "Mood", items = { "Happy", "Sad" } } }
+		local item =
+			find(Model.complete({ line = "local x = Enum.Mood.Ha", position = 22 }, catalog, "Server"), "Happy")
+		assert(item and item.kind == "Enum")
+		assert(item.textEdit and item.textEdit.newText == "Happy")
+		assert(not find(Model.complete({ line = "local x = Enum.Mood.Ha", position = 22 }, catalog, "Server"), "Sad"))
+	end,
 }
