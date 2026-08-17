@@ -17,6 +17,7 @@ TestRunner.run({
 	TypeEditorLayout = require("./TypeEditorLayout.spec"),
 	InsertFlow = require("./InsertFlow.spec"),
 	TreeReveal = require("./TreeReveal.spec"),
+	SelectionModel = require("./SelectionModel.spec"),
 	InsertPickerSafety = require("./InsertPickerSafety.spec"),
 	HostLifecycle = require("./HostLifecycle.spec"),
 	ClassOrder = require("./ClassOrder.spec"),

@@ -14,6 +14,7 @@ local IconCatalog = require(script.Parent.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Parent.Types.Registry)
 local ClassOrder = require(script.Parent.ClassOrder)
 local ContextMenu = require(script.Parent.ContextMenu)
+local SelectionModel = require(script.Parent.SelectionModel)
 
 local Tree = {}
 
@@ -54,6 +55,16 @@ end
 
 local function shiftDown(): boolean
 	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+end
+
+local function inputHasModifier(input: InputObject?, modifier: Enum.ModifierKey): boolean
+	if not input then
+		return false
+	end
+	local ok, down = pcall(function()
+		return input:IsModifierKeyDown(modifier)
+	end)
+	return ok and down == true
 end
 
 local function iconFor(instance: Instance): string
@@ -178,6 +189,10 @@ function Tree.mount(
 	local orderCounter = 0
 	local renameToken = 0
 	local selectionAnchor: Instance? = nil
+	local shiftHeld = false
+	local modHeld = false
+	local lastSelectAt = 0
+	local lastSelectInst: Instance? = nil
 	local dropTarget: Instance? = nil
 	local dragging = false
 	local dragPressed = false
@@ -234,8 +249,14 @@ function Tree.mount(
 
 	local function syncSelectionFromStudio()
 		table.clear(selected)
-		for _, inst in Selection:Get() do
+		local list = Selection:Get()
+		for _, inst in list do
 			selected[inst] = true
+		end
+		if selectionAnchor and not selected[selectionAnchor] then
+			selectionAnchor = list[#list] or list[1]
+		elseif not selectionAnchor and #list > 0 then
+			selectionAnchor = list[#list]
 		end
 	end
 
@@ -388,32 +409,28 @@ function Tree.mount(
 		return table.find(visibleOrder, inst)
 	end
 
-	local function selectWithModifiers(instance: Instance)
-		if shiftDown() and selectionAnchor and indexInVisible(selectionAnchor) and indexInVisible(instance) then
-			local a = indexInVisible(selectionAnchor) :: number
-			local b = indexInVisible(instance) :: number
-			local lo, hi = math.min(a, b), math.max(a, b)
-			local list = {}
-			for i = lo, hi do
-				table.insert(list, visibleOrder[i])
-			end
-			setStudioSelectionList(list)
-		elseif modDown() then
-			local list = {}
-			local already = selected[instance]
-			for _, inst in Selection:Get() do
-				if inst ~= instance then
-					table.insert(list, inst)
-				end
-			end
-			if not already then
-				table.insert(list, instance)
-			end
-			selectionAnchor = instance
-			setStudioSelectionList(list)
-		else
-			setStudioSelection(instance)
+	local function modifierState(input: InputObject?): (boolean, boolean)
+		local shift = shiftHeld or shiftDown() or inputHasModifier(input, Enum.ModifierKey.Shift)
+		local mod = modHeld or modDown() or inputHasModifier(input, Enum.ModifierKey.Ctrl)
+		if not mod then
+			mod = inputHasModifier(input, Enum.ModifierKey.Meta)
 		end
+		return shift, mod
+	end
+
+	local function selectWithModifiers(instance: Instance, input: InputObject?)
+		local now = os.clock()
+		if lastSelectInst == instance and (now - lastSelectAt) < 0.08 then
+			return
+		end
+		lastSelectAt = now
+		lastSelectInst = instance
+
+		local shift, mod = modifierState(input)
+		local current = Selection:Get()
+		local list, nextAnchor = SelectionModel.apply(visibleOrder, current, selectionAnchor, instance, shift, mod)
+		selectionAnchor = nextAnchor
+		setStudioSelectionList(list)
 	end
 
 	local function beginRename(instance: Instance, label: TextButton, cluster: Frame)
@@ -1056,9 +1073,9 @@ function Tree.mount(
 			if dragging then
 				return
 			end
-			local already = selected[instance] == true and not modDown() and not shiftDown()
-			selectWithModifiers(instance)
-			if not already or isServiceRoot(instance) or modDown() or shiftDown() then
+			local shift, mod = modifierState()
+			-- click is rename only. selection already happened on inputbegan
+			if selected[instance] ~= true or isServiceRoot(instance) or mod or shift then
 				return
 			end
 			renameToken += 1
@@ -1073,10 +1090,10 @@ function Tree.mount(
 			end)
 		end)
 
-		-- The label steals clicks from the row, so bind press/drag on both.
+		-- label steals clicks from the row. select once from the input object
 		label.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				selectWithModifiers(instance)
+				selectWithModifiers(instance, input)
 				beginPressDrag(input)
 			elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
 				openContext(instance, row, Vector2.new(input.Position.X, input.Position.Y))
@@ -1085,7 +1102,7 @@ function Tree.mount(
 
 		row.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				selectWithModifiers(instance)
+				selectWithModifiers(instance, input)
 				beginPressDrag(input)
 			elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
 				openContext(instance, row, Vector2.new(input.Position.X, input.Position.Y))
@@ -1264,6 +1281,37 @@ function Tree.mount(
 		opts.host.MouseLeave:Connect(function()
 			if not dragging and not dragPressed then
 				setHovered(nil)
+			end
+		end)
+	)
+
+	table.insert(
+		conns,
+		UserInputService.InputBegan:Connect(function(input)
+			if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+				shiftHeld = true
+			elseif
+				input.KeyCode == Enum.KeyCode.LeftControl
+				or input.KeyCode == Enum.KeyCode.RightControl
+				or input.KeyCode == Enum.KeyCode.LeftMeta
+				or input.KeyCode == Enum.KeyCode.RightMeta
+			then
+				modHeld = true
+			end
+		end)
+	)
+	table.insert(
+		conns,
+		UserInputService.InputEnded:Connect(function(input)
+			if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+				shiftHeld = false
+			elseif
+				input.KeyCode == Enum.KeyCode.LeftControl
+				or input.KeyCode == Enum.KeyCode.RightControl
+				or input.KeyCode == Enum.KeyCode.LeftMeta
+				or input.KeyCode == Enum.KeyCode.RightMeta
+			then
+				modHeld = false
 			end
 		end)
 	)
