@@ -8,10 +8,8 @@ return {
 	extends = "Humanoid",
 	icon = "emoji_zombie",
 	properties = {
-		{ name = "DisplayName", valueType = "string", default = "Zombie", category = "Display" },
-		{ name = "WalkSpeed", valueType = "number", default = 12, category = "Control" },
-		{ name = "MaxHealth", valueType = "number", default = 150, category = "Health" },
 		{ name = "IsHostile", valueType = "boolean", default = true, category = "AI" },
 		{ name = "DetectRange", valueType = "number", default = 40, category = "AI" },
+		{ name = "AttackDamage", valueType = "number", default = 15, category = "AI" },
 	},
 }

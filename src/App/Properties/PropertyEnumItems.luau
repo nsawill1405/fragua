@@ -19,11 +19,7 @@ function PropertyEnumItems.needsResolve(prop: EnumProp, value: any): boolean
 	return false
 end
 
-function PropertyEnumItems.forRow(
-	prop: EnumProp,
-	value: any,
-	resolve: ((EnumProp, any) -> { string }?)?
-): { string }?
+function PropertyEnumItems.forRow(prop: EnumProp, value: any, resolve: ((EnumProp, any) -> { string }?)?): { string }?
 	if PropertyEnumItems.needsResolve(prop, value) and resolve then
 		local items = resolve(prop, value)
 		if items and #items > 0 then

@@ -9,7 +9,6 @@ local PointerController = require(script.Parent.Parent.Shared.PointerController)
 local InteractionMath = require(script.Parent.Parent.Shared.InteractionMath)
 local Constants = require(script.Parent.Parent.Shared.Constants)
 local SettingsStore = require(script.Parent.Parent.Settings.Store)
-local BehaviorModel = require(script.Parent.Parent.Types.BehaviorModel)
 local IconCatalog = require(script.Parent.Parent.Types.IconCatalog)
 local Registry = require(script.Parent.Parent.Types.Registry)
 local ClassOrder = require(script.Parent.ClassOrder)
@@ -416,10 +415,6 @@ function Tree.mount(
 			selectionAnchor = inst
 		end
 		paintSelection()
-	end
-
-	local function indexInVisible(inst: Instance): number?
-		return table.find(visibleOrder, inst)
 	end
 
 	local function modifierState(input: InputObject?): (boolean, boolean)
@@ -1401,10 +1396,12 @@ function Tree.mount(
 				if inst then
 					openIfScript(inst)
 				end
-			elseif input.KeyCode == Enum.KeyCode.Delete or input.KeyCode == Enum.KeyCode.Backspace then
-				deleteSelected()
-			elseif input.KeyCode == Enum.KeyCode.D and shiftDown() and not modDown() then
+			elseif
+				input.KeyCode == Enum.KeyCode.Delete
+				or input.KeyCode == Enum.KeyCode.Backspace
 				-- shift+d delete (mac-friendly; delete/backspace still work)
+				or (input.KeyCode == Enum.KeyCode.D and shiftDown() and not modDown())
+			then
 				deleteSelected()
 			elseif input.KeyCode == Enum.KeyCode.D and modDown() then
 				duplicateSelected()

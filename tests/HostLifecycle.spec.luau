@@ -55,7 +55,7 @@ return {
 	end,
 	["unload calls onStop so edit visuals dont leak into play"] = function()
 		local source = fs.readFile("src/App/Behaviors/Host.luau")
-		assert(source:find('behavior.onStop(instance)', 1, true))
+		assert(source:find("behavior.onStop(instance)", 1, true))
 	end,
 	["invalidateType unloads tagged instances not just loaded cache"] = function()
 		local source = fs.readFile("src/App/Behaviors/Host.luau")
@@ -75,5 +75,15 @@ return {
 		local source = fs.readFile("src/App/Properties/init.luau")
 		assert(source:find("Refresh Edit Behavior", 1, true))
 		assert(source:find("Host.refreshType", 1, true))
+	end,
+	["plugin unload stops the host and disconnects its connections"] = function()
+		local host = fs.readFile("src/App/Behaviors/Host.luau")
+		local start = assert(host:find("function Host.stop", 1, true))
+		local body = host:sub(start, assert(host:find("\nend\n", start, true)))
+		assert(body:find("connection:Disconnect()", 1, true))
+		assert(body:find("unload(inst)", 1, true))
+		local entry = fs.readFile("src/init.server.luau")
+		local unloading = assert(entry:find("plugin.Unloading", 1, true))
+		assert(entry:find("Host.stop()", unloading, true), "Unloading should call Host.stop")
 	end,
 }
