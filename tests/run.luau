@@ -21,6 +21,7 @@ TestRunner.run({
 	InsertPickerSafety = require("./InsertPickerSafety.spec"),
 	HostLifecycle = require("./HostLifecycle.spec"),
 	ClassOrder = require("./ClassOrder.spec"),
+	UiPerf = require("./UiPerf.spec"),
 	IconData = require("./IconData.spec"),
 	EnginePropResolver = require("./EnginePropResolver.spec"),
 	PropertyEnumItems = require("./PropertyEnumItems.spec"),

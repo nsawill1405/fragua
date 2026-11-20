@@ -281,8 +281,8 @@ function InsertPicker.open(host: Instance, onChoose: (InsertChoice) -> ())
 
 		header.MouseButton1Click:Connect(function()
 			local nextExpanded = collapsed -- currently collapsed, so expand
-			UiUtil.setChevronExpanded(twist, nextExpanded, true)
-			task.delay(0.05, onToggle)
+			UiUtil.setChevronExpanded(twist, nextExpanded, false)
+			onToggle()
 		end)
 	end
 

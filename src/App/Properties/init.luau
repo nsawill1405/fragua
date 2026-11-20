@@ -54,8 +54,25 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.TextColor3 = Theme.textBright
 	title.TextTruncate = Enum.TextTruncate.AtEnd
+	title.RichText = true
 	title.Text = "No selection"
 	title.Parent = header
+
+	local mutedHex = Theme.textMuted:ToHex()
+	local function escapeRich(text: string): string
+		return (
+			string.gsub(text, "[&<>\"']", {
+				["&"] = "&amp;",
+				["<"] = "&lt;",
+				[">"] = "&gt;",
+				['"'] = "&quot;",
+				["'"] = "&apos;",
+			})
+		)
+	end
+	local function setTitle(name: string, className: string)
+		title.Text = `{escapeRich(name)}  <font color="#{mutedHex}">{escapeRich(className)}</font>`
+	end
 
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.Name = "Props"
@@ -140,8 +157,8 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		label.Parent = section
 
 		section.MouseButton1Click:Connect(function()
-			UiUtil.setChevronExpanded(twist, collapsed, true)
-			task.delay(0.05, onToggle)
+			UiUtil.setChevronExpanded(twist, collapsed, false)
+			onToggle()
 		end)
 	end
 
@@ -309,7 +326,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		box.BackgroundColor3 = Theme.inputBg
 		box.BorderSizePixel = 0
 		box.Font = Theme.fontMono
-		box.TextSize = 11
+		box.TextSize = 12
 		box.TextColor3 = if readonly then Theme.textMuted else Theme.textBright
 		box.TextXAlignment = Enum.TextXAlignment.Left
 		box.Text = " " .. Util.formatValue(value)
@@ -338,7 +355,21 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		end)
 	end
 
-	local function rebuild()
+	local rebuild: () -> ()
+	local rebuildQueued = false
+	-- selection, registry and tag signals often fire together; rebuild once per frame
+	local function requestRebuild()
+		if rebuildQueued then
+			return
+		end
+		rebuildQueued = true
+		task.defer(function()
+			rebuildQueued = false
+			rebuild()
+		end)
+	end
+
+	function rebuild()
 		if rebuilding then
 			return
 		end
@@ -357,6 +388,20 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 			if not current then
 				title.Text = "No selection"
 				iconHolder:SetAttribute("IconId", "class_Folder")
+				local hint = Instance.new("TextLabel")
+				hint.Name = "EmptyState"
+				hint.BackgroundTransparency = 1
+				hint.Size = UDim2.new(1, 0, 0, 56)
+				hint.Font = Theme.font
+				hint.TextSize = Theme.typeSize.control
+				hint.TextColor3 = Theme.textMuted
+				hint.TextWrapped = true
+				hint.Text = "Select an object in the Explorer to view and edit its properties."
+				hint.Parent = scroll
+				local hintPad = Instance.new("UIPadding")
+				hintPad.PaddingLeft = UDim.new(0, 16)
+				hintPad.PaddingRight = UDim.new(0, 16)
+				hintPad.Parent = hint
 				return
 			end
 
@@ -378,7 +423,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				local typeId = Registry.getTypeId(current)
 				local def = typeId and Registry.get(typeId)
 				local classLabel = if def then def.name else (typeId or "Unknown")
-				title.Text = current.Name .. "  /  " .. classLabel
+				setTitle(current.Name, classLabel)
 				iconHolder:SetAttribute("IconId", if def then def.icon else "emoji_warning")
 
 				push("Data", {
@@ -544,7 +589,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					end
 				end
 			else
-				title.Text = current.Name .. "  /  " .. current.ClassName
+				setTitle(current.Name, current.ClassName)
 				iconHolder:SetAttribute("IconId", "class_" .. current.ClassName)
 
 				for _, prop in EngineProps.forInstance(current) do
@@ -614,7 +659,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				schemaNames = schemaNames,
 				isFragua = Registry.getTypeId(current) ~= nil,
 				requestRebuild = function()
-					task.defer(rebuild)
+					requestRebuild()
 				end,
 			})
 
@@ -623,7 +668,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				local catName = cat
 				addSection(catName, order, function()
 					collapsedSections[catName] = not collapsedSections[catName]
-					task.defer(rebuild)
+					requestRebuild()
 				end)
 				order += 1
 				if not collapsedSections[catName] then
@@ -639,9 +684,9 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 				if Registry.isFraguaInstance(selected) then
 					local typeId = Registry.getTypeId(selected)
 					local def = typeId and Registry.get(typeId)
-					title.Text = selected.Name .. "  /  " .. (if def then def.name else (typeId or "Unknown"))
+					setTitle(selected.Name, if def then def.name else (typeId or "Unknown"))
 				else
-					title.Text = selected.Name .. "  /  " .. selected.ClassName
+					setTitle(selected.Name, selected.ClassName)
 				end
 			end
 			table.insert(
@@ -665,40 +710,6 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					end
 				end)
 			)
-			local watchedTags = {}
-			local function watchTag(tag: string)
-				if watchedTags[tag] then
-					return
-				end
-				watchedTags[tag] = true
-				local function changed(instance: Instance)
-					if instance == selected and current == selected then
-						task.defer(rebuild)
-					end
-				end
-				table.insert(conns, CollectionService:GetInstanceAddedSignal(tag):Connect(changed))
-				table.insert(conns, CollectionService:GetInstanceRemovedSignal(tag):Connect(changed))
-			end
-			for _, tag in CollectionService:GetAllTags() do
-				watchTag(tag)
-			end
-			table.insert(
-				conns,
-				CollectionService.TagAdded:Connect(function(tag)
-					watchTag(tag)
-					if current == selected and CollectionService:HasTag(selected, tag) then
-						task.defer(rebuild)
-					end
-				end)
-			)
-			table.insert(
-				conns,
-				CollectionService.TagRemoved:Connect(function()
-					if current == selected then
-						task.defer(rebuild)
-					end
-				end)
-			)
 			table.insert(
 				conns,
 				selected.AttributeChanged:Connect(function(attributeName)
@@ -714,7 +725,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 							typeof(nextValue)
 						) == "rebuild"
 					then
-						task.defer(rebuild)
+						requestRebuild()
 						return
 					end
 					if previewingAttributes[attributeName] then
@@ -724,7 +735,7 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 					if update and nextValue ~= nil then
 						update(nextValue)
 					else
-						task.defer(rebuild)
+						requestRebuild()
 					end
 				end)
 			)
@@ -740,13 +751,49 @@ function Properties.mount(widget: DockWidgetPluginGui, opts: { onEditScript: ((a
 		lifetime,
 		Selection.SelectionChanged:Connect(function()
 			closeMetadataDialogs()
-			task.defer(rebuild)
+			requestRebuild()
 		end)
 	)
 	table.insert(
 		lifetime,
 		Registry.Changed:Connect(function()
-			task.defer(rebuild)
+			requestRebuild()
+		end)
+	)
+
+	-- Tag signals are per tag, so watch each tag once for the dock's lifetime instead of per rebuild.
+	local watchedTags: { [string]: boolean } = {}
+	local function onTagMembershipChanged(instance: Instance)
+		if instance == current then
+			requestRebuild()
+		end
+	end
+	local function watchTag(tag: string)
+		if watchedTags[tag] then
+			return
+		end
+		watchedTags[tag] = true
+		table.insert(lifetime, CollectionService:GetInstanceAddedSignal(tag):Connect(onTagMembershipChanged))
+		table.insert(lifetime, CollectionService:GetInstanceRemovedSignal(tag):Connect(onTagMembershipChanged))
+	end
+	for _, tag in CollectionService:GetAllTags() do
+		watchTag(tag)
+	end
+	table.insert(
+		lifetime,
+		CollectionService.TagAdded:Connect(function(tag)
+			watchTag(tag)
+			if current and CollectionService:HasTag(current, tag) then
+				requestRebuild()
+			end
+		end)
+	)
+	table.insert(
+		lifetime,
+		CollectionService.TagRemoved:Connect(function()
+			if current then
+				requestRebuild()
+			end
 		end)
 	)
 	rebuild()

@@ -22,12 +22,15 @@ local Store = {}
 
 local pluginRef: Plugin? = nil
 local cache: { [string]: any } = {}
+-- decoded JSON settings, keyed by setting name; cleared whenever the raw value changes
+local decoded: { [string]: any } = {}
 local changed = Instance.new("BindableEvent")
 Store.Changed = changed.Event
 
 function Store.bind(plugin: Plugin)
 	pluginRef = plugin
 	table.clear(cache)
+	table.clear(decoded)
 end
 
 local function getRaw(key: string, default: any): any
@@ -49,6 +52,7 @@ end
 
 local function setRaw(key: string, value: any)
 	cache[key] = value
+	decoded[key] = nil
 	if pluginRef then
 		pcall(function()
 			pluginRef:SetSetting(key, value)
@@ -84,19 +88,29 @@ function Store.setAnimations(value: boolean)
 	setRaw("animations", value)
 end
 
-function Store.getVisibleServices(): { string }
-	local v = getRaw("visibleServices", nil)
+local function decodeJson(key: string): any
+	if decoded[key] ~= nil then
+		return decoded[key]
+	end
+	local v = getRaw(key, nil)
+	local result = false
 	if typeof(v) == "string" then
-		local ok, decoded = pcall(function()
+		local ok, value = pcall(function()
 			return HttpService:JSONDecode(v)
 		end)
-		if ok and typeof(decoded) == "table" then
-			return decoded
+		if ok and typeof(value) == "table" then
+			result = value
 		end
 	elseif typeof(v) == "table" then
-		return v
+		result = v
 	end
-	return table.clone(DEFAULT_SERVICES)
+	decoded[key] = result
+	return result
+end
+
+function Store.getVisibleServices(): { string }
+	local list = decodeJson("visibleServices")
+	return if list then table.clone(list) else table.clone(DEFAULT_SERVICES)
 end
 
 function Store.setVisibleServices(list: { string })
@@ -104,16 +118,8 @@ function Store.setVisibleServices(list: { string })
 end
 
 function Store.getSectionColors(): { [string]: { number } }
-	local v = getRaw("sectionColors", nil)
-	if typeof(v) == "string" then
-		local ok, decoded = pcall(function()
-			return HttpService:JSONDecode(v)
-		end)
-		if ok and typeof(decoded) == "table" then
-			return decoded
-		end
-	end
-	return {}
+	local map = decodeJson("sectionColors")
+	return if map then table.clone(map) else {}
 end
 
 function Store.setSectionColor(name: string, color: Color3)
@@ -123,8 +129,8 @@ function Store.setSectionColor(name: string, color: Color3)
 end
 
 function Store.colorForSection(name: string, fallback: Color3): Color3
-	local map = Store.getSectionColors()
-	local rgb = map[name]
+	local map = decodeJson("sectionColors")
+	local rgb = map and map[name]
 	if typeof(rgb) == "table" and rgb[1] and rgb[2] and rgb[3] then
 		return Color3.new(rgb[1], rgb[2], rgb[3])
 	end

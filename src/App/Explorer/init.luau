@@ -2,6 +2,7 @@ local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local Selection = game:GetService("Selection")
 
 local Theme = require(script.Parent.Shared.Theme)
+local Util = require(script.Parent.Shared.Util)
 local Host = require(script.Parent.Behaviors.Host)
 local SettingsUI = require(script.Parent.Settings)
 local InsertPicker = require(script.InsertPicker)
@@ -33,7 +34,7 @@ function Explorer.mount(widget: DockWidgetPluginGui)
 
 	local search = Instance.new("TextBox")
 	search.Name = "Search"
-	search.PlaceholderText = "Filter..."
+	search.PlaceholderText = "Filter by name, class or type"
 	search.ClearTextOnFocus = false
 	search.Text = ""
 	search.Font = Theme.font
@@ -63,8 +64,8 @@ function Explorer.mount(widget: DockWidgetPluginGui)
 	gear.Position = UDim2.new(1, -8, 0, 6)
 	gear.Size = UDim2.fromOffset(24, 24)
 	gear.Font = Enum.Font.GothamBold
-	gear.TextSize = 14
-	gear.Text = "S"
+	gear.TextSize = 10
+	gear.Text = "•••"
 	gear.TextColor3 = Theme.textMuted
 	gear.Parent = toolbar
 	local gc = Instance.new("UICorner")
@@ -116,8 +117,14 @@ function Explorer.mount(widget: DockWidgetPluginGui)
 		end,
 	})
 
+	-- rebuilding per keystroke stalls typing in large places
+	local rebuildForSearch = Util.debounce(0.12, treeApi.rebuild)
 	search:GetPropertyChangedSignal("Text"):Connect(function()
-		treeApi.rebuild()
+		if search.Text == "" then
+			treeApi.rebuild()
+		else
+			rebuildForSearch()
+		end
 	end)
 
 	return {
