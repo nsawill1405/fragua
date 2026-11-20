@@ -52,12 +52,17 @@ function Controls.booleanToggle(
 		Theme.play(knob, "boolean-knob", {
 			Position = if displayValue then UDim2.new(1, -16, 0.5, -7) else UDim2.fromOffset(2, 2),
 		})
-		trackTween.Completed:Once(function()
+		local function commit()
 			if token ~= animationToken or not toggle.Parent then
 				return
 			end
 			onCommit(displayValue)
-		end)
+		end
+		if trackTween then
+			trackTween.Completed:Once(commit)
+		else
+			commit()
+		end
 	end)
 
 	return toggle,

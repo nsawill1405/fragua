@@ -120,11 +120,31 @@ local function hydrateReferenceDefaults(container: Instance, def: TypeDef): Type
 	return def
 end
 
-local function decodeType(raw: string): TypeDef?
+local function parseTypeJson(raw: string): any
 	local ok, data = pcall(function()
 		return HttpService:JSONDecode(raw)
 	end)
 	if not ok or typeof(data) ~= "table" or typeof(data.id) ~= "string" then
+		return nil
+	end
+	return data
+end
+
+-- Registry.list/get run on every row paint and properties rebuild; skip re-decoding unchanged JSON.
+local parsedByContainer: { [Instance]: { raw: string, data: any } } = setmetatable({}, { __mode = "k" }) :: any
+
+local function parseContainerJson(container: Instance, raw: string): any
+	local cached = parsedByContainer[container]
+	if cached and cached.raw == raw then
+		return cached.data
+	end
+	local data = parseTypeJson(raw)
+	parsedByContainer[container] = { raw = raw, data = data }
+	return data
+end
+
+local function buildType(data: any): TypeDef?
+	if data == nil then
 		return nil
 	end
 	local props: { PropDef } = {}
@@ -139,7 +159,9 @@ local function decodeType(raw: string): TypeDef?
 					default = TypeValue.deserialize(prop.default),
 					category = prop.category or "Data",
 					readonly = prop.readonly,
-					enumItems = prop.enumItems,
+					enumItems = if typeof(prop.enumItems) == "table"
+						then table.clone(prop.enumItems)
+						else prop.enumItems,
 					enumType = prop.enumType,
 					minimum = prop.minimum,
 					maximum = prop.maximum,
@@ -160,24 +182,32 @@ local function decodeType(raw: string): TypeDef?
 	}
 end
 
-local function decodeTypeModule(module: ModuleScript): TypeDef?
+local function decodeType(raw: string): TypeDef?
+	return buildType(parseTypeJson(raw))
+end
+
+local function moduleJson(module: ModuleScript): string
 	local source = module.Source
 	local startPos = string.find(source, "[[", 1, true)
 	local endPos = startPos and string.find(source, "]]", startPos + 2, true)
-	local sourceRaw = if startPos and endPos then string.sub(source, startPos + 2, endPos - 1) else source
-	return decodeType(sourceRaw)
+	return if startPos and endPos then string.sub(source, startPos + 2, endPos - 1) else source
+end
+
+local function decodeTypeModule(module: ModuleScript): TypeDef?
+	return buildType(parseContainerJson(module, moduleJson(module)))
 end
 
 local function decodeTypeContainer(container: Instance): TypeDef?
+	local raw
 	if container:IsA("ModuleScript") then
-		local def = decodeTypeModule(container)
-		return if def then hydrateReferenceDefaults(container, def) else nil
+		raw = moduleJson(container)
+	elseif container:IsA("StringValue") then
+		raw = container.Value
+	else
+		return nil
 	end
-	if container:IsA("StringValue") then
-		local def = decodeType(container.Value)
-		return if def then hydrateReferenceDefaults(container, def) else nil
-	end
-	return nil
+	local def = buildType(parseContainerJson(container, raw))
+	return if def then hydrateReferenceDefaults(container, def) else nil
 end
 
 local function findTypeDefinition(folder: Folder, id: string): Instance?
@@ -338,9 +368,11 @@ end
 
 function Registry.findInstances(typeId: string): { Instance }
 	local found = {}
+	local seen: { [Instance]: boolean } = {}
 	for _, inst in CollectionService:GetTagged(Constants.TAG) do
 		if inst:GetAttribute(Constants.TYPE_ATTR) == typeId then
 			table.insert(found, inst)
+			seen[inst] = true
 		end
 	end
 	-- Fallback: attribute without tag (orphaned / older places)
@@ -360,10 +392,11 @@ function Registry.findInstances(typeId: string): { Instance }
 		end)
 		if ok and service then
 			for _, inst in service:GetDescendants() do
-				if inst:GetAttribute(Constants.TYPE_ATTR) == typeId and not table.find(found, inst) then
+				if not seen[inst] and inst:GetAttribute(Constants.TYPE_ATTR) == typeId then
 					-- Skip the type definition ModuleScripts under ServerStorage.Fragua
 					if not (inst:IsA("ModuleScript") and inst:FindFirstAncestor(Constants.ROOT_FOLDER)) then
 						table.insert(found, inst)
+						seen[inst] = true
 					end
 				end
 			end

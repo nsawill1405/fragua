@@ -51,9 +51,20 @@ local Theme = {
 	tweenSnap = TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 }
 
+local settingsStore = nil
+local function animationsEnabled(): boolean
+	if settingsStore == nil then
+		local ok, Store = pcall(function()
+			return require(script.Parent.Parent.Settings.Store)
+		end)
+		settingsStore = if ok and Store then Store else false
+	end
+	return not (settingsStore and settingsStore.getAnimations and not settingsStore.getAnimations())
+end
+
 local activeTweens: { [Instance]: { [string]: Tween } } = setmetatable({}, { __mode = "k" }) :: any
 
-function Theme.play(inst: Instance, key: string, props: { [string]: any }, info: TweenInfo?): Tween
+function Theme.play(inst: Instance, key: string, props: { [string]: any }, info: TweenInfo?): Tween?
 	local byKey = activeTweens[inst]
 	if not byKey then
 		byKey = {}
@@ -63,13 +74,14 @@ function Theme.play(inst: Instance, key: string, props: { [string]: any }, info:
 	if previous then
 		previous:Cancel()
 	end
-	local tweenInfo = info or Theme.tweenFast
-	local ok, Store = pcall(function()
-		return require(script.Parent.Parent.Settings.Store)
-	end)
-	if ok and Store and Store.getAnimations and not Store.getAnimations() then
-		tweenInfo = TweenInfo.new(0)
+	if (info and info.Time <= 0) or not animationsEnabled() then
+		byKey[key] = nil
+		for property, value in props do
+			(inst :: any)[property] = value
+		end
+		return nil
 	end
+	local tweenInfo = info or Theme.tweenFast
 	local tween = TweenService:Create(inst, tweenInfo, props)
 	byKey[key] = tween
 	tween.Completed:Once(function()
@@ -81,7 +93,7 @@ function Theme.play(inst: Instance, key: string, props: { [string]: any }, info:
 	return tween
 end
 
-function Theme.tween(inst: Instance, props: { [string]: any }, info: TweenInfo?): Tween
+function Theme.tween(inst: Instance, props: { [string]: any }, info: TweenInfo?): Tween?
 	return Theme.play(inst, "default", props, info)
 end
 

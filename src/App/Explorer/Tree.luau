@@ -4,6 +4,7 @@ local ScriptEditorService = game:GetService("ScriptEditorService")
 local UserInputService = game:GetService("UserInputService")
 
 local Theme = require(script.Parent.Parent.Shared.Theme)
+local UiUtil = require(script.Parent.Parent.Shared.UiUtil)
 local Util = require(script.Parent.Parent.Shared.Util)
 local PointerController = require(script.Parent.Parent.Shared.PointerController)
 local InteractionMath = require(script.Parent.Parent.Shared.InteractionMath)
@@ -70,14 +71,9 @@ local function inputHasModifier(input: InputObject?, modifier: Enum.ModifierKey)
 	return ok and down == true
 end
 
-local function iconFor(instance: Instance): string
-	if Registry.isFraguaInstance(instance) then
-		local typeId = Registry.getTypeId(instance)
-		local def = typeId and Registry.get(typeId)
-		if def then
-			return def.icon
-		end
-		return "emoji_warning"
+local function iconFor(instance: Instance, isFragua: boolean, def: any): string
+	if isFragua then
+		return if def then def.icon else "emoji_warning"
 	end
 	return "class_" .. instance.ClassName
 end
@@ -107,11 +103,9 @@ local function isHidden(inst: Instance): boolean
 	if inst.Name == Constants.ROOT_FOLDER and inst.Parent and inst.Parent.Name == "ServerStorage" then
 		return true
 	end
-	if inst:FindFirstAncestor(Constants.ROOT_FOLDER) then
-		local anc = inst:FindFirstAncestor(Constants.ROOT_FOLDER)
-		if anc and anc.Parent and anc.Parent.Name == "ServerStorage" then
-			return true
-		end
+	local anc = inst:FindFirstAncestor(Constants.ROOT_FOLDER)
+	if anc and anc.Parent and anc.Parent.Name == "ServerStorage" then
+		return true
 	end
 	-- hide per-instance Behavior copies (shared template is the source of truth)
 	if inst:IsA("ModuleScript") then
@@ -145,19 +139,20 @@ local function rootServices(): { string }
 	return SettingsStore.getVisibleServices()
 end
 
-local function shouldTrackDescendant(inst: Instance): boolean
-	if isHidden(inst) or inst:FindFirstAncestor("_FraguaNameplate") then
+local function topLevelAncestor(inst: Instance): Instance?
+	local current = inst
+	while current.Parent and current.Parent ~= game do
+		current = current.Parent
+	end
+	return if current.Parent == game then current else nil
+end
+
+local function shouldTrackDescendant(inst: Instance, visibleServices: { [string]: boolean }): boolean
+	local service = topLevelAncestor(inst)
+	if not service or not visibleServices[service.Name] then
 		return false
 	end
-	for _, serviceName in rootServices() do
-		local ok, service = pcall(function()
-			return game:GetService(serviceName)
-		end)
-		if ok and service and (inst == service or inst:IsDescendantOf(service)) then
-			return true
-		end
-	end
-	return false
+	return not isHidden(inst) and inst:FindFirstAncestor("_FraguaNameplate") == nil
 end
 
 local function isServiceRoot(inst: Instance): boolean
@@ -259,6 +254,18 @@ function Tree.mount(
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = scroll
 
+	local emptyState = Instance.new("TextLabel")
+	emptyState.Name = "EmptyState"
+	emptyState.BackgroundTransparency = 1
+	emptyState.Size = UDim2.new(1, 0, 0, 48)
+	emptyState.Font = Theme.font
+	emptyState.TextSize = Theme.typeSize.control
+	emptyState.TextColor3 = Theme.textMuted
+	emptyState.TextWrapped = true
+	emptyState.LayoutOrder = 2 ^ 30
+	emptyState.Visible = false
+	emptyState.Parent = scroll
+
 	local function syncSelectionFromStudio()
 		table.clear(selected)
 		local list = Selection:Get()
@@ -272,11 +279,15 @@ function Tree.mount(
 		end
 	end
 
+	local lastFilter, lastFilterLower = "", ""
 	local function isDirectMatch(instance: Instance, filter: string): boolean
 		if filter == "" then
 			return false
 		end
-		local lower = string.lower(filter)
+		if filter ~= lastFilter then
+			lastFilter, lastFilterLower = filter, string.lower(filter)
+		end
+		local lower = lastFilterLower
 		if string.find(string.lower(instance.Name), lower, 1, true) then
 			return true
 		end
@@ -298,6 +309,10 @@ function Tree.mount(
 		if not isAlive(instance) then
 			return
 		end
+		local plus = plusByInstance[instance]
+		if plus then
+			plus.Visible = hoveredInstance == instance or selected[instance] == true
+		end
 		local target: Color3
 		if dropTarget == instance and dragging then
 			target = Theme.dropTint
@@ -315,23 +330,21 @@ function Tree.mount(
 		end
 	end
 
-	local function refreshPlusVisibility()
-		for inst, plus in plusByInstance do
-			if plus.Parent then
-				plus.Visible = hoveredInstance == inst or selected[inst] == true
-			end
-		end
-		for inst in rowByInstance do
-			paintRow(inst)
-		end
-	end
-
 	local function setHovered(instance: Instance?)
 		if instance and not isAlive(instance) then
 			instance = nil
 		end
+		local previous = hoveredInstance
+		if previous == instance then
+			return
+		end
 		hoveredInstance = instance
-		refreshPlusVisibility()
+		if previous then
+			paintRow(previous)
+		end
+		if instance then
+			paintRow(instance)
+		end
 	end
 
 	local rebuild: () -> ()
@@ -490,14 +503,17 @@ function Tree.mount(
 			label.Text = instance.Name
 		end
 
-		box.FocusLost:Connect(function()
-			finish(true)
-		end)
-		UserInputService.InputBegan:Connect(function(input)
+		local escapeConn = UserInputService.InputBegan:Connect(function(input)
 			if input.KeyCode == Enum.KeyCode.Escape and box.Parent then
 				cancelled = true
 				finish(false)
 			end
+		end)
+		box.Destroying:Once(function()
+			escapeConn:Disconnect()
+		end)
+		box.FocusLost:Connect(function()
+			finish(true)
 		end)
 	end
 
@@ -718,7 +734,7 @@ function Tree.mount(
 		end
 		local multi = #Selection:Get() > 1
 		local locked = isServiceRoot(instance)
-		ContextMenu.open(opts.host, {
+		local items: { ContextMenu.MenuItem } = {
 			{
 				label = "Cut",
 				disabled = locked,
@@ -808,36 +824,6 @@ function Tree.mount(
 					selectChildren(instance)
 				end,
 			},
-			{
-				label = "Edit Edit Behavior...",
-				disabled = not Registry.isFraguaInstance(instance),
-				onClick = function()
-					local typeId = Registry.getTypeId(instance)
-					if typeId then
-						openBehaviorScript(typeId, "Edit")
-					end
-				end,
-			},
-			{
-				label = "Edit Server Behavior...",
-				disabled = not Registry.isFraguaInstance(instance),
-				onClick = function()
-					local typeId = Registry.getTypeId(instance)
-					if typeId then
-						openBehaviorScript(typeId, "Server")
-					end
-				end,
-			},
-			{
-				label = "Edit Client Behavior...",
-				disabled = not Registry.isFraguaInstance(instance),
-				onClick = function()
-					local typeId = Registry.getTypeId(instance)
-					if typeId then
-						openBehaviorScript(typeId, "Client")
-					end
-				end,
-			},
 			{ separator = true, label = "" },
 			{
 				label = "Delete",
@@ -847,7 +833,26 @@ function Tree.mount(
 					deleteSelected()
 				end,
 			},
-		}, {
+		}
+		local typeId = Registry.isFraguaInstance(instance) and Registry.getTypeId(instance)
+		if typeId then
+			local behaviorItems: { ContextMenu.MenuItem } = { { separator = true, label = "" } }
+			for _, side in { "Edit", "Server", "Client" } do
+				table.insert(behaviorItems, {
+					label = `Open {side} Behavior`,
+					onClick = function()
+						openBehaviorScript(typeId, side)
+					end,
+				})
+			end
+			-- insert before the final separator so Delete stays last
+			local at = #items - 1
+			for _, item in behaviorItems do
+				table.insert(items, at, item)
+				at += 1
+			end
+		end
+		ContextMenu.open(opts.host, items, {
 			anchor = anchor,
 			clickPos = clickPos,
 		})
@@ -864,7 +869,6 @@ function Tree.mount(
 		row.BackgroundColor3 = Theme.bg
 		row.LayoutOrder = orderCounter
 		row.Active = true
-		row.Parent = scroll
 		rowByInstance[instance] = row
 		instanceByRow[row] = instance
 
@@ -888,30 +892,38 @@ function Tree.mount(
 		twist.BorderSizePixel = 0
 		twist.Position = UDim2.fromOffset(padLeft - 1, 0)
 		twist.Size = UDim2.fromOffset(18, Theme.rowHeight)
-		twist.Font = Enum.Font.SourceSansBold
-		twist.TextSize = 16
-		twist.TextColor3 = Theme.text
-		twist.Text = if hasChildren then ">" else ""
-		twist.Rotation = if expanded[instance] then 90 else 0
+		twist.Text = ""
 		twist.Visible = hasChildren
 		twist.Parent = row
 		if hasChildren then
+			local chevron = UiUtil.makeChevron(twist, expanded[instance] == true, 12)
+			chevron.AnchorPoint = Vector2.new(0.5, 0.5)
+			chevron.Position = UDim2.fromScale(0.5, 0.5)
+			local function tintChevron(color: Color3)
+				for _, line in chevron:GetChildren() do
+					if line:IsA("Frame") then
+						line.BackgroundColor3 = color
+					end
+				end
+			end
 			twist.MouseButton1Click:Connect(function()
 				expanded[instance] = not expanded[instance]
-				Theme.tween(twist, { Rotation = if expanded[instance] then 90 else 0 }, Theme.tweenSnap)
-				task.delay(0.05, rebuild)
+				rebuild()
 			end)
 			twist.MouseEnter:Connect(function()
-				twist.TextColor3 = Theme.accent
+				tintChevron(Theme.accent)
 			end)
 			twist.MouseLeave:Connect(function()
-				twist.TextColor3 = Theme.text
+				tintChevron(Theme.textMuted)
 			end)
 		else
 			twist.Active = false
 		end
 
-		local icon = IconCatalog.createIconWidget(row, iconFor(instance), 14)
+		local isFragua = Registry.isFraguaInstance(instance)
+		local typeId = isFragua and Registry.getTypeId(instance)
+		local def = typeId and Registry.get(typeId)
+		local icon = IconCatalog.createIconWidget(row, iconFor(instance, isFragua, def), 14)
 		icon.Position = UDim2.fromOffset(padLeft + 18, 5)
 
 		local cluster = Instance.new("Frame")
@@ -939,9 +951,8 @@ function Tree.mount(
 		label.Font = Theme.font
 		label.TextSize = 13
 		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.TextColor3 = if isDirectMatch(instance, filter) and SettingsStore.getMatchHighlight()
-			then Theme.accent
-			else Theme.textBright
+		local directMatch = isDirectMatch(instance, filter) and SettingsStore.getMatchHighlight()
+		label.TextColor3 = if directMatch then Theme.accent else Theme.textBright
 		label.Text = instance.Name
 		label.LayoutOrder = 1
 		label.Parent = cluster
@@ -965,9 +976,7 @@ function Tree.mount(
 			opts.onInsertRequest(instance)
 		end)
 
-		if Registry.isFraguaInstance(instance) then
-			local typeId = Registry.getTypeId(instance)
-			local def = typeId and Registry.get(typeId)
+		if isFragua then
 			local badge = Instance.new("TextLabel")
 			badge.BackgroundTransparency = 1
 			badge.AutomaticSize = Enum.AutomaticSize.X
@@ -975,7 +984,7 @@ function Tree.mount(
 			badge.Font = Theme.font
 			badge.TextSize = 11
 			badge.TextColor3 = Theme.textMuted
-			badge.Text = def and ("/ " .. def.name) or "/ ?"
+			badge.Text = if def then def.name else "missing type"
 			badge.Active = false
 			badge.LayoutOrder = 3
 			badge.Parent = cluster
@@ -1144,29 +1153,36 @@ function Tree.mount(
 			end
 		end)
 
-		if isDirectMatch(instance, filter) and SettingsStore.getMatchHighlight() then
+		if directMatch then
 			matchFlash[instance] = os.clock()
 		end
 
+		row.Parent = scroll
 		paintRow(instance)
 	end
 
+	-- per-rebuild memo; walk() asks about every subtree repeatedly while filtering
+	local matchCache: { [Instance]: boolean } = {}
 	local function matchesFilter(instance: Instance, filter: string): boolean
+		local cached = matchCache[instance]
+		if cached ~= nil then
+			return cached
+		end
+		local result = false
 		if isHidden(instance) then
-			return false
-		end
-		if filter == "" then
-			return true
-		end
-		if isDirectMatch(instance, filter) then
-			return true
-		end
-		for _, child in instance:GetChildren() do
-			if matchesFilter(child, filter) then
-				return true
+			result = false
+		elseif filter == "" or isDirectMatch(instance, filter) then
+			result = true
+		else
+			for _, child in instance:GetChildren() do
+				if matchesFilter(child, filter) then
+					result = true
+					break
+				end
 			end
 		end
-		return false
+		matchCache[instance] = result
+		return result
 	end
 
 	local function walk(instance: Instance, depth: number, filter: string)
@@ -1210,6 +1226,7 @@ function Tree.mount(
 		table.clear(plusByInstance)
 		table.clear(visibleOrder)
 		table.clear(matchFlash)
+		table.clear(matchCache)
 		-- prune dead expand keys (delete/undo leaves Instance refs with Parent=nil)
 		for inst in pairs(expanded) do
 			if not isAlive(inst) then
@@ -1240,16 +1257,36 @@ function Tree.mount(
 				end
 			end
 		end
+		emptyState.Text = if filter ~= "" then `No matches for "{filter}"` else "Nothing to show"
+		emptyState.Visible = #visibleOrder == 0
 	end
 
 	local scheduleRebuild = Util.debounce(0.08, rebuild)
+
+	local visibleServiceSet: { [string]: boolean } = {}
+	local function refreshVisibleServices()
+		table.clear(visibleServiceSet)
+		for _, name in rootServices() do
+			visibleServiceSet[name] = true
+		end
+	end
+	refreshVisibleServices()
+
+	-- Without a filter, only changes under a shown row can alter the tree; skip the rest (e.g. play-mode churn).
+	local function affectsTree(inst: Instance): boolean
+		if opts.filterText() ~= "" then
+			return shouldTrackDescendant(inst, visibleServiceSet)
+		end
+		local parent = inst.Parent
+		return parent ~= nil and rowByInstance[parent] ~= nil and not isHidden(inst)
+	end
 
 	local conns: { RBXScriptConnection } = {}
 	table.insert(conns, Selection.SelectionChanged:Connect(revealStudioSelection))
 	table.insert(
 		conns,
 		game.DescendantAdded:Connect(function(inst)
-			if shouldTrackDescendant(inst) then
+			if affectsTree(inst) then
 				scheduleRebuild()
 			end
 		end)
@@ -1258,7 +1295,7 @@ function Tree.mount(
 		conns,
 		game.DescendantRemoving:Connect(function(inst)
 			-- Parent may already be clearing; also catch rows we currently show
-			if rowByInstance[inst] or shouldTrackDescendant(inst) then
+			if rowByInstance[inst] or affectsTree(inst) then
 				if hoveredInstance == inst then
 					hoveredInstance = nil
 				end
@@ -1297,6 +1334,9 @@ function Tree.mount(
 		conns,
 		SettingsStore.Changed:Connect(function(key)
 			if key == "visibleServices" or key == "matchHighlight" or key == "sectionColors" then
+				if key == "visibleServices" then
+					refreshVisibleServices()
+				end
 				scheduleRebuild()
 			end
 		end)
