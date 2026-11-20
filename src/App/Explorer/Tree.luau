@@ -18,6 +18,8 @@ local SelectionModel = require(script.Parent.SelectionModel)
 
 local Tree = {}
 
+local DOUBLE_CLICK_SECONDS = 0.4
+
 local function openScriptDocument(scriptInst: LuaSourceContainer)
 	task.spawn(function()
 		local ok, opened, err = pcall(ScriptEditorService.OpenScriptDocumentAsync, ScriptEditorService, scriptInst)
@@ -198,8 +200,9 @@ function Tree.mount(
 	local modHeld = false
 	local lastSelectAt = 0
 	local lastSelectInst: Instance? = nil
-	local lastClickAt = 0
-	local lastClickInst: Instance? = nil
+	local lastPressAt = 0
+	local lastPressInst: Instance? = nil
+	local lastPressDoubled = false
 	local dropTarget: Instance? = nil
 	local dragging = false
 	local dragPressed = false
@@ -445,6 +448,21 @@ function Tree.mount(
 			return true
 		end
 		return false
+	end
+
+	-- Detected on press: the drag capture overlay swallows mouse-up, so MouseButton1Click never fires.
+	-- Label and row both see the same press, so a second report within 80ms is the same click.
+	local function registerPress(instance: Instance): (boolean, boolean)
+		local now = os.clock()
+		local elapsed = now - lastPressAt
+		if lastPressInst == instance and elapsed < 0.08 then
+			return lastPressDoubled, true
+		end
+		local doubled = lastPressInst == instance and not lastPressDoubled and elapsed < DOUBLE_CLICK_SECONDS
+		lastPressAt = now
+		lastPressInst = instance
+		lastPressDoubled = doubled
+		return doubled, false
 	end
 
 	local function selectWithModifiers(instance: Instance, input: InputObject?)
@@ -1103,18 +1121,7 @@ function Tree.mount(
 		end
 
 		label.MouseButton1Click:Connect(function()
-			if dragging then
-				return
-			end
-			local now = os.clock()
-			local doubled = lastClickInst == instance and (now - lastClickAt) < 0.35
-			lastClickAt = now
-			lastClickInst = instance
-			if doubled then
-				renameToken += 1
-				if openIfScript(instance) then
-					return
-				end
+			if dragging or (lastPressInst == instance and lastPressDoubled) then
 				return
 			end
 			local shift, mod = modifierState()
@@ -1135,23 +1142,27 @@ function Tree.mount(
 		end)
 
 		-- label steals clicks from the row. select once from the input object
-		label.InputBegan:Connect(function(input)
+		local function onPress(input: InputObject)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				local doubled, duplicate = registerPress(instance)
 				selectWithModifiers(instance, input)
+				if doubled then
+					renameToken += 1
+					if cancelDragSession then
+						cancelDragSession()
+					end
+					if not duplicate then
+						openIfScript(instance)
+					end
+					return
+				end
 				beginPressDrag(input)
 			elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
 				openContext(instance, row, Vector2.new(input.Position.X, input.Position.Y))
 			end
-		end)
-
-		row.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				selectWithModifiers(instance, input)
-				beginPressDrag(input)
-			elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-				openContext(instance, row, Vector2.new(input.Position.X, input.Position.Y))
-			end
-		end)
+		end
+		label.InputBegan:Connect(onPress)
+		row.InputBegan:Connect(onPress)
 
 		if directMatch then
 			matchFlash[instance] = os.clock()
