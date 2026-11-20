@@ -22,22 +22,35 @@
 - Modern compact controls, transactional sliders, smoother hex/RGB color input, animated booleans, and optional interface animations
 - Sample **Zombie** type with a Studio nameplate
 
-## Install (development)
+## Install
 
-Requirements: [Aftman](https://github.com/LPGhatguy/aftman) (or Rojo 7.4+), Roblox Studio.
+### From a release build
+
+1. Download `Fragua.rbxm` from the latest [CI run](https://github.com/nsawill1405/fragua/actions/workflows/ci.yml) (build artifact) or build it yourself (below).
+2. Copy it into your local Roblox plugins folder:
+   - macOS: `~/Documents/Roblox/Plugins/`
+   - Windows: `%LOCALAPPDATA%\Roblox\Plugins\`
+3. Restart Studio (or reload plugins).
+
+### Build from source
+
+Requirements: Roblox Studio and [Aftman](https://github.com/LPGhatguy/aftman) or [Rokit](https://github.com/rojo-rbx/rokit) (both read `aftman.toml`). The toolchain is pinned in `aftman.toml`: Rojo, Lune, StyLua, Selene.
 
 ```bash
-cd ~/Projects/fragua
-aftman install
+git clone https://github.com/nsawill1405/fragua.git
+cd fragua
+aftman install            # or: rokit install
 rojo build -o Fragua.rbxm
 ```
 
-Copy `Fragua.rbxm` into your local plugins folder, then restart Studio (or reload plugins):
+Copy `Fragua.rbxm` into your plugins folder as above. For a faster loop, build straight into it:
 
-- macOS: `~/Documents/Roblox/Plugins/`
-- Windows: `%LOCALAPPDATA%/Roblox/Plugins/`
-
-Or use live sync with a Rojo plugin workflow pointing at this project.
+```bash
+# macOS
+rojo build -o ~/Documents/Roblox/Plugins/Fragua.rbxm
+# Windows (PowerShell)
+rojo build -o "$env:LOCALAPPDATA\Roblox\Plugins\Fragua.rbxm"
+```
 
 ### Toolbar
 
@@ -47,6 +60,17 @@ After install you should see a **Fragua** toolbar:
 |--------|--------|
 | Explorer | Toggle Fragua Explorer |
 | Properties | Toggle Fragua Properties |
+
+### Explorer shortcuts
+
+| Keys | Action |
+|------|--------|
+| F2 | Rename |
+| Enter | Open script |
+| Delete / Backspace / Shift+D | Delete selection |
+| Ctrl/Cmd+D | Duplicate |
+| Ctrl/Cmd+A | Select all visible |
+| Ctrl/Cmd+X / C / V | Cut / copy / paste into selection |
 
 ## Custom types
 
@@ -98,7 +122,7 @@ Every custom type has three behavior modules:
 | **Server** | Play server | `onStart`, `onStop`, plus declared server methods |
 | **Client** | Play client | `onStart`, `onStop`, plus declared client methods |
 
-Select a custom instance and choose **Edit behavior** in Fragua Properties to open the side you need in Roblox Studio's native script editor. **Refresh Edit Behavior** (next to Edit Edit Behavior) reloads edit-time hooks after you change that script. MCP and place scripts can call the same path:
+Select a custom instance and choose **Edit behavior** in Fragua Properties to open the side you need in Roblox Studio's native script editor. **Refresh Edit Behavior** reloads edit-time hooks after you change that script. MCP and place scripts can call the same path:
 
 ```luau
 Fragua.RefreshEditBehaviors()         -- every type
@@ -183,8 +207,26 @@ fragua/
       Types/                  # registry, schemas, icon picker, type editor
       Behaviors/              # edit-time behavior host
       Shared/                 # theme, constants, util
-  templates/
+  templates/                  # reference shapes for type definitions and behaviors
+  tests/                      # Lune specs (run.luau is the entry point)
 ```
+
+## Development
+
+Run the same checks CI runs before opening a pull request:
+
+```bash
+selene src tests             # lint
+stylua --check src tests     # format (run `stylua src tests` to fix)
+lune run tests/run.luau      # unit tests
+rojo build -o Fragua.rbxm    # plugin build
+```
+
+Tests are plain Luau specs under `tests/`, run with [Lune](https://github.com/lune-org/lune) outside Studio. Add new spec files to `tests/run.luau`.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep changes focused, add or update a spec in `tests/` where practical, and make sure the checks above pass.
 
 ## Limits
 
@@ -195,4 +237,4 @@ fragua/
 
 ## License
 
-Private repository — all rights reserved.
+[MIT](LICENSE) © William North

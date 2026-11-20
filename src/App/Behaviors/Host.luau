@@ -358,6 +358,21 @@ function Host.start()
 	end
 end
 
+function Host.stop()
+	for _, connection in hostConnections do
+		connection:Disconnect()
+	end
+	table.clear(hostConnections)
+	for inst in connections do
+		unload(inst)
+	end
+	for inst in loaded do
+		unload(inst)
+	end
+	clearTypeCache(nil)
+	started = false
+end
+
 function Host.onSelection(instances: { Instance })
 	if not editSessionActive() or suspended then
 		return

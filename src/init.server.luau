@@ -147,6 +147,7 @@ plugin.Unloading:Connect(function()
 	enumConnection:Disconnect()
 	runStateConnection:Disconnect()
 	selectionConnection:Disconnect()
+	Host.stop()
 	if explorerApi and explorerApi.destroy then
 		explorerApi.destroy()
 	end
