@@ -22,7 +22,7 @@ return {
 		local body = source:sub(press, pressEnd)
 		assert(body:find("registerPress(instance)", 1, true), "press must register for double click")
 		assert(body:find("openIfScript(instance)", 1, true), "double press must open scripts")
-		local doubled = assert(body:find("if doubled then", 1, true))
+		local doubled = assert(body:find('if doubled and instance:IsA("LuaSourceContainer") then', 1, true))
 		local drag = assert(body:find("beginPressDrag(input)", 1, true))
 		assert(doubled < drag, "double press must open before starting a drag capture")
 		assert(source:find("row.InputBegan:Connect(onPress)", 1, true), "row clicks must also open scripts")

@@ -1148,6 +1148,9 @@ function Tree.mount(
 				selectWithModifiers(instance, input)
 				if doubled then
 					renameToken += 1
+				end
+				-- only scripts consume the second press; other rows can still be dragged right after a click
+				if doubled and instance:IsA("LuaSourceContainer") then
 					if cancelDragSession then
 						cancelDragSession()
 					end
