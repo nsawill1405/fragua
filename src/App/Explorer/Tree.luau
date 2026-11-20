@@ -147,9 +147,9 @@ local function topLevelAncestor(inst: Instance): Instance?
 	return if current.Parent == game then current else nil
 end
 
-local function shouldTrackDescendant(inst: Instance, visibleServices: { [string]: boolean }): boolean
+local function shouldTrackDescendant(inst: Instance, visibleServices: { [Instance]: boolean }): boolean
 	local service = topLevelAncestor(inst)
-	if not service or not visibleServices[service.Name] then
+	if not service or not visibleServices[service] then
 		return false
 	end
 	return not isHidden(inst) and inst:FindFirstAncestor("_FraguaNameplate") == nil
@@ -1263,11 +1263,17 @@ function Tree.mount(
 
 	local scheduleRebuild = Util.debounce(0.08, rebuild)
 
-	local visibleServiceSet: { [string]: boolean } = {}
+	-- keyed by instance, not Name: services can be renamed
+	local visibleServiceSet: { [Instance]: boolean } = {}
 	local function refreshVisibleServices()
 		table.clear(visibleServiceSet)
 		for _, name in rootServices() do
-			visibleServiceSet[name] = true
+			local ok, service = pcall(function()
+				return game:GetService(name)
+			end)
+			if ok and service then
+				visibleServiceSet[service] = true
+			end
 		end
 	end
 	refreshVisibleServices()
