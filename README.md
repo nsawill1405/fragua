@@ -1,4 +1,17 @@
-# Fragua
+<div align="center">
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0f2027,50:203a43,100:2c5364&height=170&section=header&text=Fragua&fontSize=52&fontColor=ffffff&fontAlignY=36&desc=Custom%20instance%20types%20for%20Roblox%20Studio&descAlignY=58&descSize=16" alt="Fragua" width="100%" />
+
+<p>
+  <img src="https://img.shields.io/badge/Luau-00A2FF?style=for-the-badge&logo=roblox&logoColor=white" alt="Luau" />
+  <img src="https://img.shields.io/badge/Roblox%20Studio-000000?style=for-the-badge&logo=roblox&logoColor=white" alt="Roblox Studio" />
+  <a href="https://github.com/nsawill1405/fragua/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/nsawill1405/fragua/ci.yml?branch=main&style=for-the-badge&label=CI&logo=githubactions&logoColor=white" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2c5364?style=for-the-badge" alt="License" /></a>
+</p>
+
+<p><a href="#features-v1">Features (v1)</a> · <a href="#install">Install</a> · <a href="#custom-types">Custom types</a> · <a href="#project-layout">Project layout</a> · <a href="#development">Development</a> · <a href="#contributing">Contributing</a></p>
+
+</div>
 
 **Fragua** (Spanish: *forge*) is a Roblox Studio plugin that remakes **Explorer** and **Properties**, and lets you forge **custom instance types** that behave like first-class objects inside those panels.
 
@@ -238,3 +251,13 @@ Issues and pull requests are welcome. Keep changes focused, add or update a spec
 ## License
 
 [MIT](LICENSE) © William North
+
+---
+
+<div align="center">
+
+<sub>Made by <a href="https://github.com/nsawill1405">William North</a> · <a href="https://nsawill.co.uk">nsawill.co.uk</a></sub>
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:2c5364,50:203a43,100:0f2027&height=100&section=footer" alt="" width="100%" />
+
+</div>
